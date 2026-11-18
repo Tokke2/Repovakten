@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..catalog import CatalogRow
 from ..compare import FileReport
 from ..releases import AssetSuggestion, describe_asset
 
@@ -108,3 +109,60 @@ class FileReportDialog(QDialog):
 
     def install_requested(self) -> bool:
         return self._do_install
+
+
+class AppUpdatesDialog(QDialog):
+    """Installerade appar med nyare stabil release – välj vilken som uppdateras."""
+
+    def __init__(self, parent, rows: list[CatalogRow]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Uppdateringar finns")
+        self._rows = rows
+        self._chosen: CatalogRow | None = None
+
+        layout = QVBoxLayout(self)
+        header = QLabel(
+            "<b>Dina installerade appar har nyare stabila releaser.</b><br>"
+            "Välj en app att uppdatera – filrapporten visas före varje ändring "
+            "och den gamla kopian sparas som backup."
+        )
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        self._list = QListWidget(self)
+        for row in rows:
+            item = QListWidgetItem(
+                f"{row.repo.full_name}\n"
+                f"    installerad {row.installed_version} → senaste stabila "
+                f"{row.latest_stable_tag}"
+            )
+            item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self._list.addItem(item)
+        self._list.setCurrentRow(0)
+        self._list.itemDoubleClicked.connect(lambda _item: self.accept())
+        layout.addWidget(self._list)
+
+        buttons = QDialogButtonBox(self)
+        update_button = buttons.addButton("Uppdatera vald app", QDialogButtonBox.AcceptRole)
+        update_button.setDefault(True)
+        buttons.addButton("Stäng", QDialogButtonBox.RejectRole)
+        buttons.accepted.connect(self._accept_choice)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.resize(560, 340)
+
+    def _accept_choice(self) -> None:
+        row = self._list.currentRow()
+        if 0 <= row < len(self._rows):
+            self._chosen = self._rows[row]
+        self.accept()
+
+    def chosen(self) -> CatalogRow | None:
+        return self._chosen
+
+    @staticmethod
+    def choose(parent, rows: list[CatalogRow]) -> CatalogRow | None:
+        dialog = AppUpdatesDialog(parent, rows)
+        if dialog.exec() == QDialog.Accepted:
+            return dialog.chosen()
+        return None

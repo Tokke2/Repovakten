@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from repovakten.blocking import block_app
-from repovakten.catalog import InstallStatus, build_catalog_rows
+from repovakten.catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from repovakten.models import GitHubRepo, InstallRecord, Release, ReleaseAsset
 from repovakten.store import Store
 
@@ -138,3 +138,47 @@ def test_samma_version_ar_ingen_uppdateringskandidat(store: Store):
     install(store, 1, "v1.2.0")
     row = rows_by_id(store)[1]
     assert not row.has_update_candidate
+
+
+# --------------------------------------------- uppdateringar för installerade appar
+
+def test_uppdatering_for_installerad_app(store: Store):
+    make_repo(store, 1)
+    zip_release(store, 1, tag="v1.2.0")
+    install(store, 1, tag="v1.0.0")
+    updates = updates_for_installed_apps(store)
+    assert [r.repo.id for r in updates] == [1]
+    assert updates[0].installed_version == "v1.0.0"
+    assert updates[0].latest_stable_tag == "v1.2.0"
+
+
+def test_samma_version_ger_ingen_uppdatering(store: Store):
+    make_repo(store, 1)
+    zip_release(store, 1, tag="v1.2.0")
+    install(store, 1, tag="v1.2.0")
+    assert updates_for_installed_apps(store) == []
+
+
+def test_ej_installerad_app_listas_inte(store: Store):
+    make_repo(store, 1)
+    zip_release(store, 1)
+    assert updates_for_installed_apps(store) == []
+
+
+def test_sparrad_app_listas_inte(store: Store):
+    make_repo(store, 1)
+    zip_release(store, 1, tag="v1.2.0")
+    install(store, 1, tag="v1.0.0")
+    block_app(store, 1)
+    assert updates_for_installed_apps(store) == []
+
+
+def test_release_utan_zip_paket_listas_inte(store: Store):
+    make_repo(store, 1)
+    store.set_releases(
+        1,
+        [Release(id=100, repo_id=1, tag_name="v1.3.0",
+                 published_at="2026-11-01T10:00:00Z", assets=())],
+    )
+    install(store, 1, tag="v1.0.0")
+    assert updates_for_installed_apps(store) == []

@@ -92,3 +92,18 @@ def build_catalog_rows(store: Store) -> list[CatalogRow]:
             )
         )
     return rows
+
+
+def updates_for_installed_apps(store: Store) -> list[CatalogRow]:
+    """Installerade appar som har en nyare, installerbar stabil release.
+
+    Används av uppdateringskontrollen (menyn Hjälp → Sök uppdateringar):
+    när Repovakten kollar efter nyare kod kollas också de installerade
+    apparna. Spärrade appar och releaser utan ZIP-paket hoppas över –
+    de kan ändå inte uppdateras.
+    """
+    return [
+        row
+        for row in build_catalog_rows(store)
+        if row.has_update_candidate and row.install_allowed and row.installable_assets > 0
+    ]

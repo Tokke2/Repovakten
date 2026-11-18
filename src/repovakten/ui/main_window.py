@@ -28,13 +28,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..blocking import block_app, is_blocked, unblock_app
-from ..catalog import InstallStatus, build_catalog_rows
+from ..catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from ..errors import InstallationBlockedError, RepovaktenError
 from ..models import validate_github_username
 from ..releases import installable_assets, rank_assets_for_platform, select_latest_stable
 from ..store import Store, default_state_path
 from ..sync import SYNC_INTERVAL_SECONDS
-from .dialogs import AssetPickerDialog, FileReportDialog
+from .dialogs import AppUpdatesDialog, AssetPickerDialog, FileReportDialog
 from .donation_dialog import DonationDialog
 from .status import install_allowed_text, row_color, status_text
 from .workers import (
@@ -80,8 +80,8 @@ class MainWindow(QMainWindow):
         self._sync_timer.start()
 
         self.refresh()
+        self._pending_startup_check = True  # uppdateringskontroll efter första synken
         self.sync_now()  # synk vid appstart
-        self.check_self_update(auto=True)  # föreslå självuppdatering vid behov
 
     # ------------------------------------------------------------- UI-bygge
 
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
         donate_action.triggered.connect(self.show_donation_dialog)
         help_menu.addAction(donate_action)
         help_menu.addSeparator()
-        update_action = QAction("&Sök uppdatering…", self)
+        update_action = QAction("&Sök uppdateringar…", self)
         update_action.triggered.connect(lambda: self.check_self_update())
         help_menu.addAction(update_action)
         help_menu.addSeparator()
@@ -221,6 +221,7 @@ class MainWindow(QMainWindow):
                 self._status_label.setText(message)
             else:
                 QMessageBox.warning(self, "Sök uppdatering", message)
+            self._show_app_updates(quiet=auto)
             return
         plan = result
         self._self_plan = plan
@@ -231,6 +232,7 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.information(self, "Sök uppdatering", text)
             self._discard_self_plan()
+            self._show_app_updates(quiet=auto)
             return
         # Föreslå uppdateringen – inget ändras utan godkännande.
         dialog = FileReportDialog(
@@ -245,9 +247,11 @@ class MainWindow(QMainWindow):
             self._status_label.setText(f"Uppdaterar Repovakten till {plan.tag}…")
             worker = SelfInstallWorker(self._state_path, zip_path=plan.zip_path, tag=plan.tag)
             self._start_worker(worker, self._on_self_install_finished)
+            # Appkontrollen körs när självuppdateringen är klar.
         else:
             self._status_label.setText("Ingen ändring gjord – du kör samma kod som förut.")
             self._discard_self_plan()
+            self._show_app_updates(quiet=auto)
 
     def _on_self_install_finished(self, result) -> None:
         if isinstance(result, Exception):
@@ -270,11 +274,26 @@ class MainWindow(QMainWindow):
         )
         self._status_label.setText(f"Repovakten {result.tag} uppdaterad – starta om appen.")
         self._discard_self_plan()
+        self._show_app_updates()  # kolla även installerade appar efter uppdateringar
 
     def _discard_self_plan(self) -> None:
         plan, self._self_plan = self._self_plan, None
         if plan is not None:
             shutil.rmtree(plan.temp_dir, ignore_errors=True)
+
+    def _show_app_updates(self, quiet: bool = False) -> None:
+        """Kolla installerade appar efter uppdateringar och erbjud dem."""
+        self._store.reload()  # färsk data från senaste synken
+        updates = updates_for_installed_apps(self._store)
+        if not updates:
+            if not quiet:
+                self._status_label.setText("Inga installerade appar har uppdateringar.")
+            return
+        names = ", ".join(row.repo.full_name for row in updates)
+        self._status_label.setText(f"Uppdateringar finns för: {names}")
+        chosen = AppUpdatesDialog.choose(self, updates)
+        if chosen is not None:
+            self._install_row(chosen)
 
     # ------------------------------------------------------------- data
 
@@ -383,14 +402,22 @@ class MainWindow(QMainWindow):
         if isinstance(result, Exception):
             QMessageBox.warning(self, "Synk misslyckades", str(result))
             self._status_label.setText(f"Synk misslyckades: {result}")
-            return
-        self.refresh()
-        self._status_label.setText(result.summary_swedish())
+        else:
+            self.refresh()
+            self._status_label.setText(result.summary_swedish())
+        if getattr(self, "_pending_startup_check", False):
+            self._pending_startup_check = False
+            self.check_self_update(auto=True)  # själv + installerade appar
 
     # ------------------------------------------------------------- installation
 
     def install_selected(self) -> None:
         row = self._selected_row()
+        if row is not None:
+            self._install_row(row)
+
+    def _install_row(self, row) -> None:
+        """Installera/uppdatera en katalograd (samma flöde som tabellknappen)."""
         if row is None or self._busy:
             return
         if not row.can_install:
@@ -435,7 +462,6 @@ class MainWindow(QMainWindow):
             repo_id=row.repo.id,
             tag=stable.tag_name,
             asset=asset,
-            client_factory=self._client_factory,
         )
         self._start_worker(worker, lambda result: self._on_prepare_finished(result, row.repo.id))
 
