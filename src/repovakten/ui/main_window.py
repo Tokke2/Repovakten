@@ -1,0 +1,399 @@
+"""Huvudfönstret för Repovakten (svenska).
+
+Katalogen visar alla bevakade repon – även de utan release. Installation
+kräver alltid: (1) att appen inte är spärrad, (2) att användaren väljer
+paket om releasen har flera, och (3) att användaren godkänner filrapporten
+innan något ändras på datorn. Nätverk och installation körs i bakgrunds-
+trådar så gränssnittet aldrig fryser.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import QThread, QTimer, Qt, QUrl
+from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ..blocking import block_app, is_blocked, unblock_app
+from ..catalog import InstallStatus, build_catalog_rows
+from ..errors import InstallationBlockedError, RepovaktenError
+from ..models import validate_github_username
+from ..releases import installable_assets, rank_assets_for_platform, select_latest_stable
+from ..store import Store, default_state_path
+from ..sync import SYNC_INTERVAL_SECONDS
+from .dialogs import AssetPickerDialog, FileReportDialog
+from .status import install_allowed_text, row_color, status_text
+from .workers import InstallWorker, PrepareInstallWorker, PreparedInstall, SyncWorker
+
+_COLUMNS = ["App", "Språk", "Installerad version", "Senaste stabila", "Status", "Tillåtet"]
+
+
+class MainWindow(QMainWindow):
+    def __init__(
+        self,
+        store: Store | None = None,
+        *,
+        client_factory=None,
+        state_path: Path | None = None,
+    ) -> None:
+        super().__init__()
+        self._store = store or Store(state_path or default_state_path())
+        self._client_factory = client_factory
+        self._state_path = Path(state_path or self._store.path)
+        self._rows = []  # CatalogRow-lista, speglar tabellens rader
+        self._thread: QThread | None = None
+        self._worker: object | None = None
+        self._busy = False
+
+        self.setWindowTitle("Repovakten")
+        self.resize(960, 560)
+        self._build_ui()
+
+        self._sync_timer = QTimer(self)
+        self._sync_timer.setInterval(SYNC_INTERVAL_SECONDS * 1000)
+        self._sync_timer.timeout.connect(self.sync_now)
+        self._sync_timer.start()
+
+        self.refresh()
+        self.sync_now()  # synk vid appstart
+
+    # ------------------------------------------------------------- UI-bygge
+
+    def _build_ui(self) -> None:
+        central = QWidget(self)
+        self.setCentralWidget(central)
+        layout = QVBoxLayout(central)
+
+        toolbar = QHBoxLayout()
+        toolbar.addWidget(QLabel("Bevakade konton:"))
+        self._account_combo = QComboBox(self)
+        self._account_combo.currentTextChanged.connect(self._on_account_changed)
+        toolbar.addWidget(self._account_combo)
+
+        add_account = QPushButton("Lägg till konto…")
+        add_account.clicked.connect(self.add_account)
+        toolbar.addWidget(add_account)
+
+        remove_account = QPushButton("Ta bort konto")
+        remove_account.clicked.connect(self.remove_account)
+        toolbar.addWidget(remove_account)
+
+        toolbar.addStretch(1)
+        self._sync_button = QPushButton("Synka nu")
+        self._sync_button.clicked.connect(self.sync_now)
+        toolbar.addWidget(self._sync_button)
+        layout.addLayout(toolbar)
+
+        self._table = QTableWidget(0, len(_COLUMNS), self)
+        self._table.setHorizontalHeaderLabels(_COLUMNS)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SingleSelection)
+        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._table.verticalHeader().setVisible(False)
+        self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.itemSelectionChanged.connect(self._update_action_buttons)
+        layout.addWidget(self._table)
+
+        actions = QHBoxLayout()
+        self._install_button = QPushButton("Installera / Uppdatera…")
+        self._install_button.clicked.connect(self.install_selected)
+        actions.addWidget(self._install_button)
+
+        self._block_button = QPushButton("Spärra installation")
+        self._block_button.clicked.connect(self.toggle_block_selected)
+        actions.addWidget(self._block_button)
+
+        github_button = QPushButton("Öppna på GitHub")
+        github_button.clicked.connect(self.open_selected_on_github)
+        actions.addWidget(github_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
+
+        self._status_label = QLabel("Redo.")
+        self._status_label.setWordWrap(True)
+        layout.addWidget(self._status_label)
+
+        open_action = QAction("Synka nu", self)
+        open_action.triggered.connect(self.sync_now)
+        self.addAction(open_action)
+
+    # ------------------------------------------------------------- data
+
+    def refresh(self) -> None:
+        """Ladda om katalogen från lagret och rita om tabellen."""
+        self._rows = build_catalog_rows(self._store)
+        self._table.setRowCount(len(self._rows))
+        for index, row in enumerate(self._rows):
+            values = [
+                row.repo.full_name,
+                row.repo.language or "–",
+                row.installed_version or "–",
+                row.latest_stable_tag or "–",
+                status_text(row.status),
+                install_allowed_text(row.install_allowed),
+            ]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                if column == 4:  # statuscellen färgas
+                    color = row_color(row.status)
+                    if color:
+                        item.setBackground(color)
+                self._table.setItem(index, column, item)
+
+        accounts = self._store.accounts()
+        current = self._account_combo.currentText()
+        self._account_combo.blockSignals(True)
+        self._account_combo.clear()
+        self._account_combo.addItems(accounts)
+        if current in accounts:
+            self._account_combo.setCurrentText(current)
+        self._account_combo.blockSignals(False)
+        self._update_action_buttons()
+
+    def _selected_row(self):
+        row = self._table.currentRow()
+        if 0 <= row < len(self._rows):
+            return self._rows[row]
+        return None
+
+    def _update_action_buttons(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            self._install_button.setEnabled(False)
+            self._block_button.setEnabled(False)
+            return
+        self._install_button.setEnabled(row.can_install and not self._busy)
+        self._block_button.setEnabled(not self._busy)
+        blocked = is_blocked(self._store, row.repo.id)
+        self._block_button.setText("Tillåt igen" if blocked else "Spärra installation")
+
+    def _on_account_changed(self, _text: str) -> None:
+        # Att byta konto ändrar ingenting i katalogen – alla bevakade konton
+        # visas samtidigt. (Kombon är bara en snabbvy/förval.)
+        pass
+
+    # ------------------------------------------------------------- konton
+
+    def add_account(self) -> None:
+        name, ok = QInputDialog.getText(self, "Lägg till konto", "GitHub-användarnamn:")
+        if not ok:
+            return
+        name = name.strip()
+        if not name:
+            return
+        try:
+            normalized = validate_github_username(name)
+        except RepovaktenError as exc:
+            QMessageBox.warning(self, "Ogiltigt användarnamn", str(exc))
+            return
+        self._store.add_account(normalized)
+        self.refresh()
+        self._status_label.setText(f"Konto {normalized} bevakas. Synkar…")
+        self.sync_now()
+
+    def remove_account(self) -> None:
+        account = self._account_combo.currentText()
+        if not account:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Ta bort konto",
+            f"Sluta bevaka {account}?\n\n"
+            "Katalogen behålls, men kontot synkas inte längre. "
+            "Spärrar och installationer påverkas inte.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._store.remove_account(account)
+        self.refresh()
+        self._status_label.setText(f"Konto {account} borttaget.")
+
+    # ------------------------------------------------------------- synk
+
+    def sync_now(self) -> None:
+        if self._busy:
+            return
+        self._set_busy(True, "Synkar mot GitHub…")
+        worker = SyncWorker(self._state_path, client_factory=self._client_factory)
+        self._start_worker(worker, self._on_sync_finished)
+
+    def _on_sync_finished(self, result) -> None:
+        self._set_busy(False)
+        if isinstance(result, Exception):
+            QMessageBox.warning(self, "Synk misslyckades", str(result))
+            self._status_label.setText(f"Synk misslyckades: {result}")
+            return
+        self.refresh()
+        self._status_label.setText(result.summary_swedish())
+
+    # ------------------------------------------------------------- installation
+
+    def install_selected(self) -> None:
+        row = self._selected_row()
+        if row is None or self._busy:
+            return
+        if not row.can_install:
+            if row.status is InstallStatus.BLOCKED:
+                QMessageBox.information(
+                    self,
+                    "Spärrad",
+                    "Denna app är spärrad av admin och kan inte installeras eller uppdateras.",
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Kan inte installeras",
+                    f"Status: {status_text(row.status)}. "
+                    "Det finns inget installerbart ZIP-paket i den senaste stabila releasen.",
+                )
+            return
+
+        entry = self._store.get_entry(row.repo.id)
+        stable = select_latest_stable(entry.releases) if entry else None
+        assets = installable_assets(stable) if stable else []
+        if not assets:
+            QMessageBox.information(
+                self,
+                "Inget paket",
+                "Den senaste stabila releasen innehåller inget ZIP-paket att installera.",
+            )
+            return
+
+        if len(assets) == 1:
+            asset = assets[0]
+        else:
+            suggestions = rank_assets_for_platform(assets)
+            chosen = AssetPickerDialog.choose(self, suggestions, stable.tag_name)
+            if chosen is None:
+                return
+            asset = chosen.asset
+
+        self._set_busy(True, f"Laddar ner {asset.name}…")
+        worker = PrepareInstallWorker(
+            self._state_path,
+            repo_id=row.repo.id,
+            tag=stable.tag_name,
+            asset=asset,
+            client_factory=self._client_factory,
+        )
+        self._start_worker(worker, lambda result: self._on_prepare_finished(result, row.repo.id))
+
+    def _on_prepare_finished(self, result, repo_id: int) -> None:
+        self._set_busy(False)
+        if isinstance(result, Exception):
+            QMessageBox.warning(self, "Kunde inte förbereda installation", str(result))
+            self._status_label.setText(f"Förberedelse misslyckades: {result}")
+            return
+        prepared: PreparedInstall = result
+        is_update = self._store.get_install(repo_id) is not None
+        dialog = FileReportDialog(
+            self,
+            title=prepared.full_name,
+            tag=prepared.tag,
+            report=prepared.report,
+            is_update=is_update,
+        )
+        accepted = dialog.exec() == dialog.Accepted
+        if not accepted or not dialog.install_requested():
+            self._status_label.setText("Avbrutet – inget ändrat.")
+            return
+
+        self._set_busy(True, f"Installerar {prepared.tag}…")
+        worker = InstallWorker(
+            self._state_path,
+            zip_path=prepared.zip_path,
+            repo_id=prepared.repo_id,
+            tag=prepared.tag,
+            full_name=prepared.full_name,
+            install_dir=prepared.install_dir,
+        )
+        self._start_worker(worker, self._on_install_finished)
+
+    def _on_install_finished(self, result) -> None:
+        self._set_busy(False)
+        if isinstance(result, InstallationBlockedError):
+            QMessageBox.warning(self, "Spärrad", str(result))
+            self._status_label.setText("Installation avbruten – appen är spärrad.")
+            self.refresh()
+            return
+        if isinstance(result, Exception):
+            QMessageBox.critical(self, "Installation misslyckades", str(result))
+            self._status_label.setText(f"Installation misslyckades: {result}")
+            return
+        self.refresh()
+        backup_text = f"\nTidigare kopia sparad i:\n{result.backup_dir}" if result.backup_dir else ""
+        QMessageBox.information(
+            self,
+            "Klart",
+            f"{result.record.repo_full_name} {result.record.installed_tag} är installerad.{backup_text}",
+        )
+        self._status_label.setText(
+            f"{result.record.repo_full_name} {result.record.installed_tag} installerad."
+        )
+
+    # ------------------------------------------------------------- spärr
+
+    def toggle_block_selected(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        repo_id = row.repo.id
+        if is_blocked(self._store, repo_id):
+            unblock_app(self._store, repo_id)
+            self._status_label.setText(f"{row.repo.full_name} är tillåten igen.")
+        else:
+            reason, ok = QInputDialog.getText(
+                self,
+                "Spärra installation",
+                f"Spärra {row.repo.full_name}?\n\n"
+                "En spärrad app kan visas men inte installeras eller uppdateras. "
+                "En redan installerad kopia raderas INTE.\n\nOrsak (valfritt):",
+            )
+            if not ok:
+                return
+            block_app(self._store, repo_id, reason=reason.strip())
+            self._status_label.setText(f"{row.repo.full_name} är spärrad.")
+        self.refresh()
+
+    # ------------------------------------------------------------- övrigt
+
+    def open_selected_on_github(self) -> None:
+        row = self._selected_row()
+        if row is None or not row.repo.html_url:
+            return
+        QDesktopServices.openUrl(QUrl(row.repo.html_url))
+
+    # ------------------------------------------------------------- trådar
+
+    def _start_worker(self, worker, on_finished) -> None:
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(on_finished)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        self._thread = thread
+        self._worker = worker
+        thread.start()
+
+    def _set_busy(self, busy: bool, message: str | None = None) -> None:
+        self._busy = busy
+        self._sync_button.setEnabled(not busy)
+        if message:
+            self._status_label.setText(message)
+        self._update_action_buttons()

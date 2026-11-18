@@ -11,6 +11,14 @@ from repovakten.github import HttpResponse
 from repovakten.store import Store
 
 
+@pytest.fixture(autouse=True)
+def _isolated_repovakten_home(monkeypatch, tmp_path):
+    """Håll tester borta från riktiga hemkatalogen/state."""
+    monkeypatch.setenv("REPOVAKTEN_HOME", str(tmp_path / "repovakten-home"))
+    monkeypatch.setenv("REPOVAKTEN_APPS", str(tmp_path / "repovakten-apps"))
+    monkeypatch.setenv("REPOVAKTEN_BACKUPS", str(tmp_path / "repovakten-backups"))
+
+
 # ---------------------------------------------------------------- API-JSON
 
 def api_repo(

@@ -25,8 +25,11 @@ classifiers = [
 # Kärnlogiken är helt beroendefri (endast standardbiblioteket).
 dependencies = []
 
+[project.scripts]
+repovakten-gui = "repovakten.gui:main"
+
 [project.optional-dependencies]
-# Gränssnittet byggs med Qt för Python (PySide6) – kommer i nästa steg.
+# Gränssnittet byggs med Qt för Python (PySide6).
 gui = ["PySide6>=6.7"]
 dev = ["pytest>=8"]
 

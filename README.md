@@ -16,7 +16,7 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
 
 - Python **3.11+** (målet är senaste Python, 3.14-serien; koden undviker
   versionsspecifika finesser så den kör överallt från 3.11 och uppåt)
-- För GUI och installation senare: `pip install repovakten[gui]` (PySide6)
+- För GUI: `pip install repovakten[gui]` (PySide6)
 
 ## Utveckling
 
@@ -90,8 +90,14 @@ src/repovakten/
   compare.py       Filrapport: ny / ändrad / saknad / utgående + svensk text
   catalog.py       Vymodell: status per repo (klar/spärrad/ingen release/…)
   platforminfo.py  OS- och arkitekturidentifiering
+  installer.py     Installation: nedladdning (HTTPS), validering, backup,
+                   uppackning, borttag av utgående filer, rollback vid fel
   errors.py        Felhierarki
-tests/             109 tester (fejkad GitHub-transport, inga nätverksanrop)
+  gui.py           Startpunkt: `repovakten-gui` / `python -m repovakten.gui`
+  ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger,
+                   bakgrundsarbetare (synk/nedladdning/installation),
+                   svenska statustexter
+tests/             128 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg
