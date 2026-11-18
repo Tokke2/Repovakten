@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (201 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (211 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -41,7 +41,7 @@ portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 201 tester
+.venv/bin/python -m pytest          # 211 tester
 ```
 
 ## Så fungerar det
@@ -91,6 +91,13 @@ python3 -m venv .venv
    installerade apparna** efter nyare stabila releaser och erbjuder att
    uppdatera dem en och en – samma säkra flöde med filrapport och backup.
    Söks automatiskt efter synken vid appstart.
+9. **Egen installationsmapp och skanning** (menyn Arkiv): välj själv var
+   installerade program ska läggas (Arkiv → Installationsmapp…) – eller
+   återställ till standardmappen genom att välja den. Låt Repovakten söka
+   igenom en mapp efter appar som redan är installerade (Arkiv → Sök
+   installerade appar…): hittade appar registreras med SHA-256-manifest så
+   att de kan uppdateras på plats, och uppdateringar hamnar alltid där
+   appen redan ligger. Bevarade mappar som `storage/` räknas aldrig.
 
 ## Säkerhet och garantier
 
@@ -124,6 +131,7 @@ loggen och visas i dialogen – koden kan citeras vid en felrapport:
 | `UPPDATERA-001` | Kunde inte söka uppdatering |
 | `UPPDATERA-002` | Självuppdateringen misslyckades |
 | `AUTOSTART-001` | Autostart kunde inte ställas in |
+| `SKANNING-001` | Mappskanningen misslyckades |
 | `LAGRING-001` | `state.json` kunde inte läsas eller skrivas |
 | `DONATION-001` | Donationsdialogen kunde inte visas |
 | `QT-001` / `QT-002` | Varning / kritiskt fel från Qt-ramverket |
@@ -150,6 +158,7 @@ src/repovakten/
   platforminfo.py  OS- och arkitekturidentifiering
   installer.py     Installation: nedladdning (HTTPS), validering, backup,
                    uppackning, borttag av utgående filer, rollback vid fel
+  scan.py          Skanna mapp efter appar som redan är installerade (Qt-fri)
   errors.py        Felhierarki
   donation.py      Donationer: Swish-QR (C-format), PayPal, Ko-fi (Qt-fri)
   selfupdate.py    Självuppdatering: jämför och uppdaterar den körande koden
@@ -161,7 +170,7 @@ src/repovakten/
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             201 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             211 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

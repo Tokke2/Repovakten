@@ -93,6 +93,15 @@ def app_install_dir(full_name: str, root: Path | None = None) -> Path:
     return base / _sanitize_segment(full_name)
 
 
+def install_root_for(store: "Store | None" = None) -> Path:
+    """Rotmapp för installationer: användarval, annars standard per OS."""
+    if store is not None:
+        custom = store.get_install_root()
+        if custom:
+            return Path(custom).expanduser()
+    return default_install_root()
+
+
 # ---------------------------------------------------------- nedladdning
 
 def download_asset(
@@ -289,11 +298,16 @@ def install_from_zip(
     full_name = repo_full_name or (entry.repo.full_name if entry else f"repo-{repo_id}")
     if preserved is None:
         preserved = list(entry.preserve_paths) if entry else list(DEFAULT_PRESERVE_PATHS)
-    target_dir = Path(install_dir) if install_dir else app_install_dir(full_name)
-    backups = Path(backup_root) if backup_root else default_backup_root()
-
     old_record = store.get_install(repo_id)
     manifest = old_record.files if old_record else None
+    # Var appen läggs: explicit val > redan registrerad mapp > användarval/standard.
+    if install_dir is not None:
+        target_dir = Path(install_dir)
+    elif old_record is not None and old_record.install_dir:
+        target_dir = Path(old_record.install_dir)
+    else:
+        target_dir = app_install_dir(full_name, root=install_root_for(store))
+    backups = Path(backup_root) if backup_root else default_backup_root()
 
     # 2. Rapporten beräknas FÖRE någon ändring – samma rapport som visas för användaren.
     report = compare_install(zip_path, target_dir, manifest_files=manifest, preserved=preserved)

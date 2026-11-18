@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot
 
 from ..compare import FileReport, compare_install
-from ..installer import app_install_dir, download_asset, install_from_zip
+from ..installer import app_install_dir, download_asset, install_from_zip, install_root_for
 from ..models import ReleaseAsset
 from ..store import Store
 
@@ -93,10 +93,16 @@ class PrepareInstallWorker(QObject):
                 zip_path = temp_dir / self._asset.name
                 download_asset(self._asset.download_url, zip_path)
 
-            install_dir = self._install_dir or app_install_dir(full_name)
-            preserved = list(entry.preserve_paths) if entry else None
             old_record = store.get_install(self._repo_id)
             manifest = old_record.files if old_record else None
+            # Var appen ligger: explicit val > redan registrerad mapp > vald rot.
+            if self._install_dir is not None:
+                install_dir = Path(self._install_dir)
+            elif old_record is not None and old_record.install_dir:
+                install_dir = Path(old_record.install_dir)
+            else:
+                install_dir = app_install_dir(full_name, root=install_root_for(store))
+            preserved = list(entry.preserve_paths) if entry else None
             report = compare_install(
                 zip_path,
                 install_dir,
@@ -213,5 +219,26 @@ class SelfInstallWorker(QObject):
             store = Store(self._store_path)
             result = selfupdate.install_update(self._zip_path, store=store, tag=self._tag)
             self.finished.emit(result)
+        except Exception as exc:
+            self.finished.emit(exc)
+
+
+class ScanWorker(QObject):
+    """Skanna en mapp efter appar som redan är installerade (lokala kopior)."""
+
+    finished = Signal(object)  # scan.ScanReport eller Exception
+
+    def __init__(self, store_path, *, folder: Path, parent=None) -> None:
+        super().__init__(parent)
+        self._store_path = Path(store_path)
+        self._folder = Path(folder)
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            from ..scan import scan_folder
+
+            store = Store(self._store_path)
+            self.finished.emit(scan_folder(self._folder, store))
         except Exception as exc:
             self.finished.emit(exc)

@@ -15,6 +15,7 @@ from PySide6.QtCore import QThread, QTimer, Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -31,6 +32,7 @@ from .. import applog, autostart
 from ..blocking import block_app, is_blocked, unblock_app
 from ..catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from ..errors import InstallationBlockedError, RepovaktenError
+from ..installer import default_install_root, install_root_for
 from ..models import validate_github_username
 from ..releases import installable_assets, rank_assets_for_platform, select_latest_stable
 from ..store import Store, default_state_path
@@ -42,6 +44,7 @@ from .workers import (
     InstallWorker,
     PrepareInstallWorker,
     PreparedInstall,
+    ScanWorker,
     SelfCheckWorker,
     SelfInstallWorker,
     SyncWorker,
@@ -150,6 +153,13 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
 
         file_menu = menubar.addMenu("&Arkiv")
+        dir_action = QAction("Installationsmapp…", self)
+        dir_action.triggered.connect(self.choose_install_dir)
+        file_menu.addAction(dir_action)
+        scan_action = QAction("Sök installerade appar…", self)
+        scan_action.triggered.connect(self.scan_for_installs)
+        file_menu.addAction(scan_action)
+        file_menu.addSeparator()
         self._autostart_action = QAction("Starta med datorn", self)
         self._autostart_action.setCheckable(True)
         self._autostart_action.setChecked(autostart.is_enabled())
@@ -188,6 +198,57 @@ class MainWindow(QMainWindow):
             return
         self._status_label.setText(message)
         self._autostart_action.setChecked(autostart.is_enabled())
+
+    # ------------------------------------------------- installationsmapp
+
+    def choose_install_dir(self) -> None:
+        """Välj mapp dit installerade program läggs (alla OS)."""
+        current = str(install_root_for(self._store))
+        chosen = QFileDialog.getExistingDirectory(
+            self, "Mapp för installerade program", current
+        )
+        if not chosen:
+            return
+        try:
+            if Path(chosen).resolve() == default_install_root().resolve():
+                self._store.set_install_root(None)
+                text = f"Installationer läggs i standardmappen: {default_install_root()}"
+            else:
+                self._store.set_install_root(chosen)
+                text = f"Installationer läggs nu i: {chosen}"
+        except RepovaktenError as exc:
+            self._fail("Installationsmapp", str(exc), applog.LAGRING_FEL, exc=exc)
+            return
+        applog.info(text)
+        self._status_label.setText(text)
+
+    def scan_for_installs(self) -> None:
+        """Sök igenom en mapp efter appar som redan är installerade."""
+        if self._busy:
+            return
+        folder = QFileDialog.getExistingDirectory(
+            self, "Mapp att söka igenom", str(install_root_for(self._store))
+        )
+        if not folder:
+            return
+        self._set_busy(True, f"Söker installerade appar i {folder}…")
+        worker = ScanWorker(self._state_path, folder=Path(folder))
+        self._start_worker(worker, self._on_scan_finished)
+
+    def _on_scan_finished(self, result) -> None:
+        self._set_busy(False)
+        if isinstance(result, Exception):
+            self._fail(
+                "Sökningen misslyckades",
+                str(result),
+                applog.SKANNING_FEL,
+                exc=result,
+            )
+            return
+        applog.info(f"Skanning av {result.folder}: {result.summary_swedish()}")
+        self.refresh()
+        QMessageBox.information(self, "Sökning klar", result.summary_swedish())
+        self._status_label.setText(f"Sökning klar i {result.folder}.")
 
     def _fail(
         self,

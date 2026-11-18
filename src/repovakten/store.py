@@ -68,6 +68,7 @@ class Store:
             "repos": {},
             "blocks": {},
             "installs": {},
+            "settings": {},
             "last_sync_at": None,
         }
 
@@ -113,6 +114,7 @@ class Store:
             )
         for key in ("accounts", "repos", "blocks", "installs"):
             data.setdefault(key, {} if key != "accounts" else [])
+        data.setdefault("settings", {})
         data.setdefault("last_sync_at", None)
         return data
 
@@ -173,6 +175,26 @@ class Store:
         return False
 
     # ------------------------------------------------------ katalog
+
+    # ------------------------------------------------------- inställningar
+
+    def get_install_root(self) -> str | None:
+        """Användarvald rotmapp för installationer, eller ``None`` för standard."""
+        self.load()
+        assert self._data is not None
+        value = (self._data.get("settings") or {}).get("install_root")
+        return str(value) if value else None
+
+    def set_install_root(self, path: str | None) -> None:
+        """Välj var installerade program läggs (``None`` = standardmappen)."""
+        self.load()
+        assert self._data is not None
+        settings = self._data.setdefault("settings", {})
+        if path:
+            settings["install_root"] = str(path)
+        else:
+            settings.pop("install_root", None)
+        self.save()
 
     def _entries(self) -> dict:
         self.load()

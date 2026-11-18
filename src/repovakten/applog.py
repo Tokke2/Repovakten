@@ -27,6 +27,7 @@ INSTALL_SPARRAD = "INSTALL-003"        # appen är spärrad av admin
 UPPDATERA_SOK_FEL = "UPPDATERA-001"    # kunde inte söka uppdatering
 UPPDATERA_FEL = "UPPDATERA-002"        # självuppdateringen misslyckades
 AUTOSTART_FEL = "AUTOSTART-001"        # autostart kunde inte ställas in
+SKANNING_FEL = "SKANNING-001"          # mappskanning misslyckades
 LAGRING_FEL = "LAGRING-001"            # state.json kunde inte läsas/skrivas
 DONATION_FEL = "DONATION-001"          # donationsdialogen kunde inte visas
 QT_VARNING = "QT-001"                  # varning från Qt-ramverket
@@ -42,6 +43,7 @@ CODES = (
     UPPDATERA_SOK_FEL,
     UPPDATERA_FEL,
     AUTOSTART_FEL,
+    SKANNING_FEL,
     LAGRING_FEL,
     DONATION_FEL,
     QT_VARNING,
