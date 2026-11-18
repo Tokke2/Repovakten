@@ -38,6 +38,10 @@ jobs:
           set -euo pipefail
           ZIP="$(ls dist/Repovakten-*-portable.zip)"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # Rullande release: flytta taggen till nyaste koden och byt ut ZIP:en,
+            # så att hela releasen (även källkodsarkiven) alltid speglar ny kod.
+            git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+            git push -f origin "refs/tags/$RELEASE_TAG"
             gh release upload "$RELEASE_TAG" "$ZIP" --clobber
             echo "Uppdaterade $RELEASE_TAG med $ZIP"
           else
