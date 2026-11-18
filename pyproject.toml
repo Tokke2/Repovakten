@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "repovakten"
+version = "0.1.0"
+description = "Repovakten – installationshanterare för GitHub-appar (bevakar konton, spärrar och filjämförelse med SHA-256)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Tokke" }]
+keywords = ["github", "releases", "installation", "desktop"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Swedish",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+# Kärnlogiken är helt beroendefri (endast standardbiblioteket).
+dependencies = []
+
+[project.optional-dependencies]
+# Gränssnittet byggs med Qt för Python (PySide6) – kommer i nästa steg.
+gui = ["PySide6>=6.7"]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/repovakten"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+source = ["src/repovakten"]
