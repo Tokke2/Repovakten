@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (159 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (171 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -25,7 +25,7 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 159 tester
+.venv/bin/python -m pytest          # 171 tester
 ```
 
 ## Så fungerar det
@@ -66,6 +66,12 @@ python3 -m venv .venv
    knappar för PayPal och Ko-fi. Swish-numret visas aldrig i klartext –
    bara QR-koden innehåller det. Gåvan är helt frivillig och ändrar
    ingenting i appen.
+8. **Självuppdatering** (`repovakten.selfupdate`, menyn Hjälp → Sök
+   uppdatering): Repovakten kollar sin egen rullande release och jämför
+   paketets filer mot den körande koden med SHA-256 – också när
+   versionsnumret är samma. Filrapporten visas före ändringen och ingenting
+   görs utan godkännande; backup och rullning tillbaka ingår. Endast
+   `repovakten/`-paketet uppdateras. Söks även automatiskt vid appstart.
 
 ## Säkerhet och garantier
 
@@ -101,11 +107,12 @@ src/repovakten/
                    uppackning, borttag av utgående filer, rollback vid fel
   errors.py        Felhierarki
   donation.py      Donationer: Swish-QR (C-format), PayPal, Ko-fi (Qt-fri)
+  selfupdate.py    Självuppdatering: jämför och uppdaterar den körande koden
   gui.py           Startpunkt: `repovakten-gui` / `python -m repovakten.gui`
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             159 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             171 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

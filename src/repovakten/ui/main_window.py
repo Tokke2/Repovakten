@@ -8,6 +8,7 @@ trådar så gränssnittet aldrig fryser.
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import QThread, QTimer, Qt, QUrl
@@ -36,7 +37,14 @@ from ..sync import SYNC_INTERVAL_SECONDS
 from .dialogs import AssetPickerDialog, FileReportDialog
 from .donation_dialog import DonationDialog
 from .status import install_allowed_text, row_color, status_text
-from .workers import InstallWorker, PrepareInstallWorker, PreparedInstall, SyncWorker
+from .workers import (
+    InstallWorker,
+    PrepareInstallWorker,
+    PreparedInstall,
+    SelfCheckWorker,
+    SelfInstallWorker,
+    SyncWorker,
+)
 
 _COLUMNS = ["App", "Språk", "Installerad version", "Senaste stabila", "Status", "Tillåtet"]
 
@@ -57,6 +65,10 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._worker: object | None = None
         self._busy = False
+        # Självuppdatering körs i egen tråd så den aldrig blockerar appen.
+        self._self_thread: QThread | None = None
+        self._self_worker: object | None = None
+        self._self_plan: object | None = None
 
         self.setWindowTitle("Repovakten")
         self.resize(960, 560)
@@ -69,6 +81,7 @@ class MainWindow(QMainWindow):
 
         self.refresh()
         self.sync_now()  # synk vid appstart
+        self.check_self_update(auto=True)  # föreslå självuppdatering vid behov
 
     # ------------------------------------------------------------- UI-bygge
 
@@ -146,6 +159,10 @@ class MainWindow(QMainWindow):
         donate_action.triggered.connect(self.show_donation_dialog)
         help_menu.addAction(donate_action)
         help_menu.addSeparator()
+        update_action = QAction("&Sök uppdatering…", self)
+        update_action.triggered.connect(lambda: self.check_self_update())
+        help_menu.addAction(update_action)
+        help_menu.addSeparator()
         about_action = QAction("&Om Repovakten", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
@@ -166,6 +183,98 @@ class MainWindow(QMainWindow):
             '<a href="https://github.com/Tokke2/Repovakten">GitHub</a>.<br><br>'
             "Vill du stödja utvecklingen? Menyn Hjälp → Stöd projektet 💚",
         )
+
+    # ------------------------------------------------------- självuppdatering
+
+    def check_self_update(self, auto: bool = False) -> None:
+        """Sök nyare kod i den rullande releasen och föreslå uppdatering.
+
+        Filrapporten visas alltid INNAN något ändras; avslutas dialogen
+        sker ingenting. ``auto=True`` används vid appstart och visar
+        tystare statusmeddelanden vid fel.
+        """
+        if self._self_thread is not None:
+            return  # en sökning pågår redan
+        if not auto:
+            self._status_label.setText("Söker uppdatering av Repovakten…")
+        worker = SelfCheckWorker(self._state_path, client_factory=self._client_factory)
+        thread = QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(lambda result: self._on_self_check_finished(result, auto))
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_self_check_thread)
+        self._self_thread = thread
+        self._self_worker = worker  # behåll referens tills tråden är klar
+        thread.start()
+
+    def _clear_self_check_thread(self) -> None:
+        self._self_thread = None
+        self._self_worker = None
+
+    def _on_self_check_finished(self, result, auto: bool) -> None:
+        if isinstance(result, Exception):
+            message = f"Kunde inte söka uppdatering av Repovakten: {result}"
+            if auto:
+                self._status_label.setText(message)
+            else:
+                QMessageBox.warning(self, "Sök uppdatering", message)
+            return
+        plan = result
+        self._self_plan = plan
+        if not plan.has_changes:
+            text = f"Repovakten kör redan koden från {plan.tag} – inga filer skiljer sig."
+            if auto:
+                self._status_label.setText(text)
+            else:
+                QMessageBox.information(self, "Sök uppdatering", text)
+            self._discard_self_plan()
+            return
+        # Föreslå uppdateringen – inget ändras utan godkännande.
+        dialog = FileReportDialog(
+            self,
+            title=f"Självuppdatering – Repovakten {plan.tag}",
+            tag=plan.tag,
+            report=plan.report,
+            is_update=True,
+        )
+        dialog.setWindowTitle("Uppdatera Repovakten")
+        if dialog.exec() and dialog.install_requested():
+            self._status_label.setText(f"Uppdaterar Repovakten till {plan.tag}…")
+            worker = SelfInstallWorker(self._state_path, zip_path=plan.zip_path, tag=plan.tag)
+            self._start_worker(worker, self._on_self_install_finished)
+        else:
+            self._status_label.setText("Ingen ändring gjord – du kör samma kod som förut.")
+            self._discard_self_plan()
+
+    def _on_self_install_finished(self, result) -> None:
+        if isinstance(result, Exception):
+            QMessageBox.warning(
+                self,
+                "Självuppdatering",
+                f"Uppdateringen misslyckades: {result}\n\nDen gamla kopian är återställd.",
+            )
+            self._status_label.setText("Självuppdateringen misslyckades – gamla kopian kvar.")
+            self._discard_self_plan()
+            return
+        backup_text = (
+            f"\n\nTidigare kopia sparad i:\n{result.backup_dir}" if result.backup_dir else ""
+        )
+        QMessageBox.information(
+            self,
+            "Repovakten är uppdaterad",
+            f"Programfilerna är uppdaterade till {result.tag}.{backup_text}\n\n"
+            "Starta om Repovakten för att använda den nya koden.",
+        )
+        self._status_label.setText(f"Repovakten {result.tag} uppdaterad – starta om appen.")
+        self._discard_self_plan()
+
+    def _discard_self_plan(self) -> None:
+        plan, self._self_plan = self._self_plan, None
+        if plan is not None:
+            shutil.rmtree(plan.temp_dir, ignore_errors=True)
 
     # ------------------------------------------------------------- data
 

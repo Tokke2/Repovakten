@@ -166,3 +166,52 @@ class InstallWorker(QObject):
             self.finished.emit(result)
         except Exception as exc:
             self.finished.emit(exc)
+
+
+class SelfCheckWorker(QObject):
+    """Sök efter nyare kod i den rullande releasen (självuppdatering)."""
+
+    finished = Signal(object)  # selfupdate.SelfUpdatePlan eller Exception
+
+    def __init__(self, store_path, client_factory=None, parent=None) -> None:
+        super().__init__(parent)
+        self._store_path = Path(store_path)
+        self._client_factory = client_factory
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            from .. import selfupdate
+            from ..github import GitHubClient
+
+            store = Store(self._store_path)
+            old_record = store.get_install(selfupdate.SELF_RECORD_ID)
+            manifest = old_record.files if old_record else None
+            factory = self._client_factory or GitHubClient
+            plan = selfupdate.check_for_update(factory(), manifest_files=manifest)
+            self.finished.emit(plan)
+        except Exception as exc:
+            self.finished.emit(exc)
+
+
+class SelfInstallWorker(QObject):
+    """Installera självuppdateringen (backup och rollback ingår)."""
+
+    finished = Signal(object)  # InstallResult eller Exception
+
+    def __init__(self, store_path, *, zip_path, tag: str, parent=None) -> None:
+        super().__init__(parent)
+        self._store_path = Path(store_path)
+        self._zip_path = Path(zip_path)
+        self._tag = tag
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            from .. import selfupdate
+
+            store = Store(self._store_path)
+            result = selfupdate.install_update(self._zip_path, store=store, tag=self._tag)
+            self.finished.emit(result)
+        except Exception as exc:
+            self.finished.emit(exc)
