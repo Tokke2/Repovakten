@@ -122,3 +122,27 @@ def test_samma_version_men_olika_fil_upptacks(tmp_path):
     report = compare_install(archive, install_dir, manifest_files=manifest)
     assert [d.path for d in report.changed] == ["Lager.exe"]
     assert "Lager.exe" in report.format_swedish()
+
+
+def test_compare_install_stripar_gemensam_rot(tmp_path):
+    """Release-ZIP:ar med rotkatalog jämförs mot filerna som de landar på disk."""
+    archive = make_zip(
+        tmp_path / "release.zip",
+        {"MyApp-1.0/app.py": b"print('ny')\n", "MyApp-1.0/lib/b.py": b"samma"},
+    )
+    install_dir = make_tree(
+        tmp_path / "install",
+        {"app.py": b"print('gammal')\n", "lib/b.py": b"samma"},
+    )
+    report = compare_install(archive, install_dir)
+    assert [d.path for d in report.changed] == ["app.py"]
+    assert report.new == [] and report.removed == [] and report.missing == []
+    assert report.identical_files == 1
+
+
+def test_compare_install_identisk_efter_rotstrippning(tmp_path):
+    archive = make_zip(tmp_path / "release.zip", {"MyApp-1.0/app.py": b"samma"})
+    install_dir = make_tree(tmp_path / "install", {"app.py": b"samma"})
+    report = compare_install(archive, install_dir)
+    assert not report.differences
+    assert report.identical_files == 1

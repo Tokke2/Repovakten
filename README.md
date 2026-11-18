@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (128 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (136 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -25,7 +25,7 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 128 tester
+.venv/bin/python -m pytest          # 136 tester
 ```
 
 ## Så fungerar det
@@ -99,7 +99,7 @@ src/repovakten/
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger,
                    bakgrundsarbetare (synk/nedladdning/installation),
                    svenska statustexter
-tests/             128 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             136 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

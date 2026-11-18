@@ -115,3 +115,27 @@ def test_hash_zip_taket_pa_antal_filer(tmp_path):
     archive = make_zip(tmp_path / "release.zip", members)
     with pytest.raises(UnsafeArchiveError):
         hash_zip(archive, max_members=5)
+
+
+def test_hash_zip_stripar_gemensam_rot(tmp_path):
+    archive = make_zip(
+        tmp_path / "release.zip",
+        {"MyApp-1.0/app.py": b"a", "MyApp-1.0/lib/b.py": b"b"},
+    )
+    assert set(hash_zip(archive)) == {"app.py", "lib/b.py"}
+
+
+def test_hash_zip_rot_med_toppfiler_strippas_inte(tmp_path):
+    archive = make_zip(
+        tmp_path / "release.zip",
+        {"MyApp-1.0/app.py": b"a", "README": b"r"},
+    )
+    assert set(hash_zip(archive)) == {"MyApp-1.0/app.py", "README"}
+
+
+def test_hash_zip_bevarad_inne_i_rot_hoppas_over(tmp_path):
+    archive = make_zip(
+        tmp_path / "release.zip",
+        {"MyApp-1.0/app.py": b"a", "MyApp-1.0/storage/db": b"x"},
+    )
+    assert set(hash_zip(archive, preserved=["storage/"])) == {"app.py"}

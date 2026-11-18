@@ -7,6 +7,8 @@ robust oavsett om paketet skapats på Windows, macOS eller Linux:
 * Absoluta sökvägar, enhetsbokstäver, ``..`` och NUL-byte avvisas (zip-slip).
 * Efter normalisering avvisas dubbletter (t.ex. ``./x`` och ``x``).
 * Bevarade sökvägar (användardata, t.ex. ``storage/``) hoppas alltid över.
+* En gemensam rotkatalog (t.ex. ``MyApp-1.2.0/…``) strippas, så att
+  hashning och uppackning använder samma sökvägsnamnrum.
 """
 from __future__ import annotations
 
@@ -116,41 +118,73 @@ def hash_tree(root: Path, preserved: Iterable[str] = ()) -> dict[str, str]:
     return {rel: sha256_file(path) for rel, path in iter_tree(root, preserved)}
 
 
-def _zip_entries(
+def common_root_prefix(paths: Iterable[str]) -> str | None:
+    """Returnera den gemensamma rotkatalogen om alla sökvägar delar exakt en.
+
+    Regeln är densamma för hashning och uppackning: alla filer måste ligga
+    under samma toppnivåkatalog och ingen får ligga direkt i roten. Om så är
+    fallet returneras katalognamnet (t.ex. ``MyApp-1.2.0``), annars ``None``.
+    """
+    entries = list(paths)
+    if not entries:
+        return None
+    first_components = {rel.split("/", 1)[0] for rel in entries}
+    if len(first_components) == 1 and all("/" in rel for rel in entries):
+        return next(iter(first_components))
+    return None
+
+
+def zip_entries(
     zip_path: Path,
     preserved: Iterable[str],
     *,
-    max_members: int,
-    max_uncompressed: int,
+    max_members: int = MAX_MEMBERS,
+    max_uncompressed: int = MAX_UNCOMPRESSED_BYTES,
 ) -> list[tuple[str, zipfile.ZipInfo]]:
+    """Validera hela arkivet och returnera ``[(relpath, ZipInfo)]``.
+
+    Sökvägarna normaliseras och valideras (zip-slip med flera avvisas).
+    Om alla filer delar en gemensam rotkatalog strippas den, så att
+    relsökvägarna motsvarar filerna som de landar på disk. Bevarade
+    sökvägar hoppas över *efter* rottstrippningen – användardata inne i
+    en rotkatalog (t.ex. ``MyApp-1.0/storage/…``) skrivs alltså aldrig
+    över. Dubbletter och säkerhetsgränser kontrolleras sist. Kastar
+    :class:`UnsafeArchiveError` innan något skrivits.
+    """
     try:
         archive = zipfile.ZipFile(zip_path)
     except zipfile.BadZipFile as exc:
         raise UnsafeArchiveError(f"{Path(zip_path).name} är inte ett giltigt ZIP-arkiv.") from exc
 
-    entries: list[tuple[str, zipfile.ZipInfo]] = []
-    seen: set[str] = set()
-    total_uncompressed = 0
+    raw: list[tuple[str, zipfile.ZipInfo]] = []
     with archive:
         for info in archive.infolist():
             if info.is_dir():
                 continue
-            rel = normalize_relpath(info.filename)
-            if is_preserved(rel, preserved):
-                continue
-            if rel in seen:
-                raise UnsafeArchiveError(f"Dubblettpost i arkivet efter normalisering: {rel!r}")
-            seen.add(rel)
-            if len(entries) + 1 > max_members:
-                raise UnsafeArchiveError(
-                    f"Arkivet innehåller fler än {max_members} filer; avbryter av säkerhetsskäl."
-                )
-            total_uncompressed += info.file_size
-            if total_uncompressed > max_uncompressed:
-                raise UnsafeArchiveError(
-                    "Arkivet är större än tillåtet i uppackad form; avbryter av säkerhetsskäl."
-                )
-            entries.append((rel, info))
+            raw.append((normalize_relpath(info.filename), info))
+
+    prefix = common_root_prefix([rel for rel, _ in raw])
+    entries: list[tuple[str, zipfile.ZipInfo]] = []
+    seen: set[str] = set()
+    total_uncompressed = 0
+    for rel, info in raw:
+        if prefix:
+            rel = rel[len(prefix) + 1:]
+        if is_preserved(rel, preserved):
+            continue
+        if rel in seen:
+            raise UnsafeArchiveError(f"Dubblettpost i arkivet efter normalisering: {rel!r}")
+        seen.add(rel)
+        if len(entries) + 1 > max_members:
+            raise UnsafeArchiveError(
+                f"Arkivet innehåller fler än {max_members} filer; avbryter av säkerhetsskäl."
+            )
+        total_uncompressed += info.file_size
+        if total_uncompressed > max_uncompressed:
+            raise UnsafeArchiveError(
+                "Arkivet är större än tillåtet i uppackad form; avbryter av säkerhetsskäl."
+            )
+        entries.append((rel, info))
     return entries
 
 
@@ -164,9 +198,12 @@ def hash_zip(
     """Hasha alla filer i ett ZIP-arkiv utan att packa upp det.
 
     Sökvägarna normaliseras och valideras – se modulens dokumenation.
+    En gemensam rotkatalog i arkivet strippas (samma regel som
+    installationen använder), så att nycklarna motsvarar filerna
+    på disk. Bevarade sökvägar hoppas över.
     """
     zip_path = Path(zip_path)
-    entries = _zip_entries(zip_path, preserved, max_members=max_members, max_uncompressed=max_uncompressed)
+    entries = zip_entries(zip_path, preserved, max_members=max_members, max_uncompressed=max_uncompressed)
     result: dict[str, str] = {}
     with zipfile.ZipFile(zip_path) as archive:
         for rel, info in entries:

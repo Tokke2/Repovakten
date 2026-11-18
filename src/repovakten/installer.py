@@ -41,6 +41,7 @@ from .hashing import (
     is_preserved,
     normalize_relpath,
     sha256_file,
+    zip_entries,
 )
 from .models import DEFAULT_PRESERVE_PATHS, InstallRecord, utcnow_iso
 from .store import Store, default_state_dir
@@ -151,43 +152,19 @@ def _validated_members(
 
     Om ALLA filer i arkivet ligger under exakt en gemensam rotkatalog
     (t.ex. ``MyApp-1.2.0/…``) strippas den, så att innehållet landar direkt
-    i installationskatalogen. Kastar UnsafeArchiveError innan något skrivits.
+    i installationskatalogen. Bevarade sökvägar hoppas över efter
+    rottstrippningen (``MyApp-1.2.0/storage/…`` skrivs aldrig över).
+    Kastar UnsafeArchiveError innan något skrivits.
+
+    Själva valideringen delas med :func:`repovakten.hashing.zip_entries`,
+    så att jämförelsen och uppackningen alltid ser samma filer.
     """
-    try:
-        archive = zipfile.ZipFile(zip_path)
-    except zipfile.BadZipFile as exc:
-        raise UnsafeArchiveError(f"{Path(zip_path).name} är inte ett giltigt ZIP-arkiv.") from exc
-
-    raw: list[tuple[str, zipfile.ZipInfo]] = []
-    seen: set[str] = set()
-    total = 0
-    with archive:
-        for info in archive.infolist():
-            if info.is_dir():
-                continue
-            rel = normalize_relpath(info.filename)
-            if is_preserved(rel, preserved):
-                continue  # användardata packas aldrig upp över befintliga filer
-            if rel in seen:
-                raise UnsafeArchiveError(f"Dubblettpost i arkivet: {rel!r}")
-            seen.add(rel)
-            if len(raw) + 1 > MAX_MEMBERS:
-                raise UnsafeArchiveError(f"Fler än {MAX_MEMBERS} filer i arkivet; avbryter.")
-            total += info.file_size
-            if total > MAX_UNCOMPRESSED_BYTES:
-                raise UnsafeArchiveError("Arkivet är för stort uppackat; avbryter.")
-            raw.append((rel, info))
-
-    if not raw:
-        return []
-
-    first_components = {rel.split("/", 1)[0] for rel, _ in raw}
-    if len(first_components) == 1 and all("/" in rel for rel, _ in raw):
-        prefix = next(iter(first_components))
-        stripped = [(rel[len(prefix) + 1 :], info) for rel, info in raw]
-        if all(stripped):  # ingen tom sökväg
-            return stripped
-    return raw
+    return zip_entries(
+        zip_path,
+        preserved,
+        max_members=MAX_MEMBERS,
+        max_uncompressed=MAX_UNCOMPRESSED_BYTES,
+    )
 
 
 def _checked_destination(base: Path, rel: str) -> Path:

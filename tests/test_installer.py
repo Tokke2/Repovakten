@@ -8,6 +8,7 @@ import pytest
 
 from repovakten import installer
 from repovakten.blocking import block_app, is_blocked
+from repovakten.compare import compare_install
 from repovakten.errors import InstallationBlockedError, RepovaktenError, UnsafeArchiveError
 from repovakten.installer import (
     app_install_dir,
@@ -107,6 +108,8 @@ def test_gemensam_rotkatalog_strippas(tmp_path, store: Store):
     assert (install_dir / "app.exe").exists()
     assert not (install_dir / "MyApp-1.3.0").exists()
     assert set(result.record.files) == {"app.exe", "readme.txt"}
+    # Rapporten visar samma sökvägar som hamnar på disk (utan rot).
+    assert sorted(d.path for d in result.report.new) == ["app.exe", "readme.txt"]
 
 
 def test_gemensam_rot_strippas_inte_nar_filer_ligger_pa_toppniva(tmp_path, store: Store):
@@ -311,3 +314,78 @@ def test_nedladdning_kraver_https(tmp_path):
 
 def test_backup_install_utan_installation(tmp_path):
     assert backup_install(tmp_path / "finns-inte", tmp_path / "backups", "A/B", "v1") is None
+
+
+def test_uppdatering_med_rotkatalog_raderar_inte_filer(tmp_path, store: Store):
+    """Uppdatering av en release med rotkatalog: bara ändrade filer rapporteras,
+    inga filer raderas och den gamla kopian sparas som backup."""
+    install_dir = tmp_path / "inst"
+    backups = tmp_path / "backups"
+    v1 = make_zip(
+        tmp_path / "v1.zip",
+        {"MyApp-1.0/app.exe": b"gammal", "MyApp-1.0/lib.py": b"lib"},
+    )
+    r1 = install_from_zip(
+        v1,
+        store=store,
+        repo_id=42,
+        tag="v1.0",
+        repo_full_name="Tokke2/Appen",
+        install_dir=install_dir,
+        backup_root=backups,
+    )
+    v2 = make_zip(
+        tmp_path / "v2.zip",
+        {"MyApp-1.0/app.exe": b"ny", "MyApp-1.0/lib.py": b"lib", "MyApp-1.0/tillagg.py": b"ny"},
+    )
+    # Samma jämförelse som GUI:t gör FÖRE installationen.
+    report = compare_install(v2, install_dir, manifest_files=r1.record.files)
+    assert [d.path for d in report.changed] == ["app.exe"]
+    assert [d.path for d in report.new] == ["tillagg.py"]
+    assert report.removed == [] and report.missing == []
+    assert report.identical_files == 1
+
+    r2 = install_from_zip(
+        v2,
+        store=store,
+        repo_id=42,
+        tag="v1.1",
+        repo_full_name="Tokke2/Appen",
+        install_dir=install_dir,
+        backup_root=backups,
+    )
+    # Ingenting raderades – tvärtom lades en fil till.
+    assert (install_dir / "app.exe").read_bytes() == b"ny"
+    assert (install_dir / "lib.py").read_bytes() == b"lib"
+    assert (install_dir / "tillagg.py").read_bytes() == b"ny"
+    assert r2.removed_files == []
+    # Den gamla versionen finns kvar som backup.
+    assert r2.backup_dir is not None
+    assert (r2.backup_dir / "app.exe").read_bytes() == b"gammal"
+    assert r2.record.files == {
+        "app.exe": sha(b"ny"),
+        "lib.py": sha(b"lib"),
+        "tillagg.py": sha(b"ny"),
+    }
+
+
+def test_rotkatalog_med_storage_skrivs_inte_over(tmp_path, store: Store):
+    """Användardata inne i paketets rotkatalog får aldrig skriva över lagrat innehåll."""
+    install_dir = tmp_path / "inst"
+    make_tree(install_dir, {"storage/secret.db": b"USERDATA", "gammal.txt": b"ska bort"})
+    archive = make_zip(
+        tmp_path / "paket.zip",
+        {"MyApp-1.0/app.exe": b"bin", "MyApp-1.0/storage/secret.db": b"RELEASE-VERSION"},
+    )
+    result = install_from_zip(
+        archive,
+        store=store,
+        repo_id=42,
+        tag="v1.3.0",
+        repo_full_name="Tokke2/Appen",
+        install_dir=install_dir,
+        backup_root=tmp_path / "backups",
+    )
+    assert (install_dir / "app.exe").read_bytes() == b"bin"
+    assert (install_dir / "storage" / "secret.db").read_bytes() == b"USERDATA"
+    assert "storage/secret.db" not in result.record.files
