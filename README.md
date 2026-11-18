@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (200 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (201 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -41,7 +41,7 @@ portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 200 tester
+.venv/bin/python -m pytest          # 201 tester
 ```
 
 ## Så fungerar det
@@ -161,7 +161,7 @@ src/repovakten/
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             200 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             201 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg
