@@ -1,8 +1,15 @@
 """Donator-dialogen – öppnas via menyn Hjälp → Stöd projektet.
 
-Layouten följer stod.html: (1) välj belopp (förinställda knappar eller
-eget), (2) välj sätt – Swish-QR enligt Swish C-standard, PayPal och
-Ko-fi. Swish-numret visas aldrig i klartext; QR-koden innehåller det.
+Anpassad från stod.html (Mitt Maskinkök) till Repovakten:
+
+* (1) Välj belopp – förinställda knappar eller egen summa.
+* (2) Välj sätt – Swish-QR enligt Swish C-standard, samt knappar för
+  PayPal och Ko-fi. INGEN QR för PayPal/Ko-fi – bara Swish-QR.
+* Varför gåvan gör skillnad + trygghetsrader + kort FAQ, med äkta
+  uppgifter (inga påhittade siffror).
+* Ingen egen webbsida – donationsflödet finns bara i appen.
+
+Swish-numret visas aldrig i klartext; QR-koden innehåller det.
 """
 from __future__ import annotations
 
@@ -14,6 +21,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
 )
@@ -64,14 +72,31 @@ QFrame {
 }
 """
 
+_PILL_STYLE = """
+QLabel {
+    background: white; border: 1px solid #e0e0e0; border-radius: 10px;
+    padding: 5px 10px; color: #5f6e70; font-size: 11px;
+}
+"""
+
+_FAQ_Q = "font-weight: 700;"
+_FAQ_A = "color: #5f6e70;"
+
+
+def _bold(point_size: int = 11) -> QFont:
+    font = QFont()
+    font.setPointSize(point_size)
+    font.setBold(True)
+    return font
+
 
 class DonationDialog(QDialog):
-    """Valfri gåva: Swish-QR (C-format), PayPal eller Ko-fi."""
+    """Valfri gåva: Swish-QR (C-format), PayPal eller Ko-fi – bara i appen."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Stöd Repovakten")
-        self.setMinimumWidth(680)
+        self.setMinimumSize(700, 560)
         self._amount = donation.DEFAULT_AMOUNT
         self._chip_buttons: list[tuple[QPushButton, int]] = []
         self._build_ui()
@@ -80,28 +105,30 @@ class DonationDialog(QDialog):
     # ------------------------------------------------------------- UI-bygge
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        container = QWidget()
+        layout = QVBoxLayout(container)
 
         title = QLabel("💚 Stöd Repovakten")
-        font = QFont()
-        font.setPointSize(16)
-        font.setBold(True)
-        title.setFont(font)
+        title.setFont(_bold(16))
         layout.addWidget(title)
 
         intro = QLabel(
-            "Repovakten är gratis, utan reklam och öppen källkod. En gåva är helt "
-            "frivillig, låser upp ingenting och ändrar ingenting i appen – men hjälper "
-            "till med utveckling, test och nya funktioner. Tack! 💚"
+            "<b>Repovakten</b> är en installationshanterare för GitHub-appar – gratis, "
+            "utan reklam och öppen källkod. Din gåva är helt frivillig, låser upp "
+            "ingenting och ändrar ingenting i appen – men hjälper till med utveckling, "
+            "test och nya funktioner. Tack! 💚"
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
         # 1. Belopp
         step1 = QLabel("1. Välj belopp – eller skriv ett eget")
-        step1_font = QFont()
-        step1_font.setBold(True)
-        step1.setFont(step1_font)
+        step1.setFont(_bold())
         layout.addWidget(step1)
 
         amount_row = QHBoxLayout()
@@ -125,19 +152,18 @@ class DonationDialog(QDialog):
         self._info_label = QLabel()
         layout.addWidget(self._info_label)
 
-        # 2. Sätt
+        # 2. Sätt – Swish med QR, PayPal och Ko-fi som rena knappar (ingen QR)
         step2 = QLabel("2. Välj sätt – skanna QR-koden eller klicka på knappen")
-        step2.setFont(step1_font)
+        step2.setFont(_bold())
         layout.addWidget(step2)
 
         methods = QHBoxLayout()
 
-        # Swish med QR
         swish_frame = QFrame()
         swish_frame.setStyleSheet(_FRAME_STYLE % "#00b06c")
         swish_layout = QVBoxLayout(swish_frame)
         swish_title = QLabel("💚 Swish")
-        swish_title.setFont(step1_font)
+        swish_title.setFont(_bold())
         swish_layout.addWidget(swish_title, alignment=Qt.AlignHCenter)
         self._qr_label = QLabel()
         self._qr_label.setAlignment(Qt.AlignHCenter)
@@ -153,14 +179,17 @@ class DonationDialog(QDialog):
         swish_layout.addWidget(swish_note)
         methods.addWidget(swish_frame, stretch=1)
 
-        # PayPal
         paypal_frame = QFrame()
         paypal_frame.setStyleSheet(_FRAME_STYLE % "#0070BA")
         paypal_layout = QVBoxLayout(paypal_frame)
         paypal_title = QLabel("💙 PayPal")
-        paypal_title.setFont(step1_font)
+        paypal_title.setFont(_bold())
         paypal_layout.addWidget(paypal_title, alignment=Qt.AlignHCenter)
-        paypal_note = QLabel("Öppnar paypal.me i webbläsaren\nmed valt belopp.")
+        paypal_note = QLabel(
+            "Öppnar paypal.me i webbläsaren\n"
+            "med valt belopp.\n"
+            "Ingen QR – bara knappen."
+        )
         paypal_note.setAlignment(Qt.AlignHCenter)
         paypal_note.setWordWrap(True)
         paypal_layout.addWidget(paypal_note)
@@ -175,14 +204,17 @@ class DonationDialog(QDialog):
         paypal_layout.addWidget(self._paypal_button)
         methods.addWidget(paypal_frame, stretch=1)
 
-        # Ko-fi
         kofi_frame = QFrame()
         kofi_frame.setStyleSheet(_FRAME_STYLE % "#FF5E5B")
         kofi_layout = QVBoxLayout(kofi_frame)
         kofi_title = QLabel("☕ Ko-fi")
-        kofi_title.setFont(step1_font)
+        kofi_title.setFont(_bold())
         kofi_layout.addWidget(kofi_title, alignment=Qt.AlignHCenter)
-        kofi_note = QLabel("Engångs- eller månadsstöd –\nvälj belopp på Ko-fi.")
+        kofi_note = QLabel(
+            "Engångs- eller månadsstöd –\n"
+            "välj belopp på Ko-fi.\n"
+            "Ingen QR – bara knappen."
+        )
         kofi_note.setAlignment(Qt.AlignHCenter)
         kofi_note.setWordWrap(True)
         kofi_layout.addWidget(kofi_note)
@@ -201,13 +233,93 @@ class DonationDialog(QDialog):
 
         layout.addLayout(methods)
 
+        # Varför gåvan gör skillnad – äkta uppgifter, inga påhittade siffror
+        why_frame = QFrame()
+        why_frame.setStyleSheet(_FRAME_STYLE % "#27ae60")
+        why_layout = QVBoxLayout(why_frame)
+        why_title = QLabel("Varför din hjälp gör skillnad")
+        why_title.setFont(_bold())
+        why_layout.addWidget(why_title)
+        why_text = QLabel(
+            "Du stödjer en enskild utvecklare – inte ett bolag. Gåvan går till "
+            "utveckling, test och nya funktioner. Allt i appen är gratis oavsett."
+        )
+        why_text.setWordWrap(True)
+        why_layout.addWidget(why_text)
+
+        impact_row = QHBoxLayout()
+        for icon, heading, text in (
+            ("🔓", "Öppen källkod", "All kod ligger öppen på GitHub – gåvan ändrar inget i det."),
+            ("💡", "25 önskemål", "IDEER.md listar 25 konkreta förbättringar – gåvor gör att fler blir verklighet."),
+            ("✅", "Genomtestad kod", "Automatiserade tester kör innan varje release uppdateras."),
+        ):
+            item = QLabel(f"<b>{icon} {heading}</b><br>{text}")
+            item.setWordWrap(True)
+            item.setStyleSheet(
+                "QLabel { background: #fafafa; border: 1px solid #eee;"
+                " border-radius: 8px; padding: 8px; }"
+            )
+            impact_row.addWidget(item, stretch=1)
+        why_layout.addLayout(impact_row)
+
+        trust_row = QHBoxLayout()
+        for badge in (
+            "🔒 Swish, PayPal & Ko-fi – krypterat",
+            "🧾 Kvitto direkt från betaltjänsten",
+            "🕊️ Ingen spårning – bara tacksamhet",
+            "🇸🇪 Svensk utvecklare",
+        ):
+            pill = QLabel(badge)
+            pill.setStyleSheet(_PILL_STYLE)
+            trust_row.addWidget(pill)
+        trust_row.addStretch(1)
+        why_layout.addLayout(trust_row)
+        layout.addWidget(why_frame)
+
+        # Kort FAQ
+        faq_frame = QFrame()
+        faq_frame.setStyleSheet(_FRAME_STYLE % "#8e44ad")
+        faq_layout = QVBoxLayout(faq_frame)
+        faq_title = QLabel("Vanliga frågor – lugnt & tryggt")
+        faq_title.setFont(_bold())
+        faq_layout.addWidget(faq_title)
+        for question, answer in (
+            (
+                "💳 Hur betalar jag säkert?",
+                "Allt går direkt till Swish, PayPal och Ko-fi (HTTPS). Appen ser aldrig "
+                "dina betaluppgifter och kvittot kommer från betaltjänsten.",
+            ),
+            (
+                "🔁 Kan jag ge månadsvis?",
+                "Ja! På Ko-fi väljer du månadsstöd med valfritt belopp – avsluta när du "
+                "vill, ingen bindning.",
+            ),
+            (
+                "🎁 Vad får jag som tack?",
+                "Inget låses upp – allt i appen är gratis för alla, alltid. Bara evig "
+                "tacksamhet. 💚",
+            ),
+        ):
+            q = QLabel(question)
+            q.setStyleSheet(_FAQ_Q)
+            a = QLabel(answer)
+            a.setWordWrap(True)
+            a.setStyleSheet(_FAQ_A)
+            faq_layout.addWidget(q)
+            faq_layout.addWidget(a)
+        layout.addWidget(faq_frame)
+
+        layout.addStretch(1)
+        scroll.setWidget(container)
+        outer.addWidget(scroll)
+
         bottom = QHBoxLayout()
         bottom.addStretch(1)
         close_button = QPushButton("Stäng")
         close_button.setDefault(True)
         close_button.clicked.connect(self.accept)
         bottom.addWidget(close_button)
-        layout.addLayout(bottom)
+        outer.addLayout(bottom)
 
     # ------------------------------------------------------------- logik
 
