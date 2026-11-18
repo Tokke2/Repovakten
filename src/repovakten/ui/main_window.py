@@ -34,6 +34,7 @@ from ..releases import installable_assets, rank_assets_for_platform, select_late
 from ..store import Store, default_state_path
 from ..sync import SYNC_INTERVAL_SECONDS
 from .dialogs import AssetPickerDialog, FileReportDialog
+from .donation_dialog import DonationDialog
 from .status import install_allowed_text, row_color, status_text
 from .workers import InstallWorker, PrepareInstallWorker, PreparedInstall, SyncWorker
 
@@ -72,6 +73,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------- UI-bygge
 
     def _build_ui(self) -> None:
+        self._build_menu()
         central = QWidget(self)
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -128,6 +130,42 @@ class MainWindow(QMainWindow):
         open_action = QAction("Synka nu", self)
         open_action.triggered.connect(self.sync_now)
         self.addAction(open_action)
+
+    def _build_menu(self) -> None:
+        """Menyrad – donationsdialogen nås via Hjälp → Stöd projektet."""
+        menubar = self.menuBar()
+
+        file_menu = menubar.addMenu("&Arkiv")
+        quit_action = QAction("&Avsluta", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.close)
+        file_menu.addAction(quit_action)
+
+        help_menu = menubar.addMenu("&Hjälp")
+        donate_action = QAction("&Stöd projektet… 💚", self)
+        donate_action.triggered.connect(self.show_donation_dialog)
+        help_menu.addAction(donate_action)
+        help_menu.addSeparator()
+        about_action = QAction("&Om Repovakten", self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+    def show_donation_dialog(self) -> None:
+        """Öppna donator-dialogen (Swish-QR, PayPal, Ko-fi)."""
+        DonationDialog(self).exec()
+
+    def show_about(self) -> None:
+        from .. import __version__
+
+        QMessageBox.about(
+            self,
+            "Om Repovakten",
+            f"<b>Repovakten {__version__}</b><br><br>"
+            "Installations- och uppdateringshanterare för GitHub-appar.<br>"
+            "Gratis, utan reklam – öppen källkod på "
+            '<a href="https://github.com/Tokke2/Repovakten">GitHub</a>.<br><br>'
+            "Vill du stödja utvecklingen? Menyn Hjälp → Stöd projektet 💚",
+        )
 
     # ------------------------------------------------------------- data
 

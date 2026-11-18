@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (136 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (159 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -18,14 +18,14 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
 
 - Python **3.11+** (målet är senaste Python, 3.14-serien; koden undviker
   versionsspecifika finesser så den kör överallt från 3.11 och uppåt)
-- För GUI: `pip install repovakten[gui]` (PySide6)
+- För GUI: `pip install repovakten[gui]` (PySide6 + segno)
 
 ## Utveckling
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 136 tester
+.venv/bin/python -m pytest          # 159 tester
 ```
 
 ## Så fungerar det
@@ -61,6 +61,11 @@ python3 -m venv .venv
    kan stängas utan att installera. Vid godkännande kontrolleras spärren
    igen och den tidigare kopian sparas som backup. Nedladdade program körs
    **aldrig** automatiskt.
+7. **Donationsdialog** (`repovakten.donation`, menyn Hjälp → Stöd projektet):
+   valfritt belopp med Swish-QR enligt Swish officiella C-format, plus
+   knappar för PayPal och Ko-fi. Swish-numret visas aldrig i klartext –
+   bara QR-koden innehåller det. Gåvan är helt frivillig och ändrar
+   ingenting i appen.
 
 ## Säkerhet och garantier
 
@@ -95,11 +100,12 @@ src/repovakten/
   installer.py     Installation: nedladdning (HTTPS), validering, backup,
                    uppackning, borttag av utgående filer, rollback vid fel
   errors.py        Felhierarki
+  donation.py      Donationer: Swish-QR (C-format), PayPal, Ko-fi (Qt-fri)
   gui.py           Startpunkt: `repovakten-gui` / `python -m repovakten.gui`
-  ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger,
-                   bakgrundsarbetare (synk/nedladdning/installation),
-                   svenska statustexter
-tests/             136 tester (fejkad GitHub-transport, inga nätverksanrop)
+  ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
+                   (filrapport, paketval, donation), bakgrundsarbetare
+                   (synk/nedladdning/installation), svenska statustexter
+tests/             159 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

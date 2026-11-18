@@ -48,7 +48,7 @@ jobs:
             printf '%s\n' \
               'Första releasen av Repovakten – installationshanterare för GitHub-appar med svenskt Qt-gränssnitt.' \
               '' \
-              '**Portabel ZIP:** packa upp och kör `Repovakten.bat` (Windows) eller `./repovakten.sh` (macOS/Linux). Kräver Python 3.11+ och PySide6 (`pip install PySide6`).' \
+              '**Portabel ZIP:** packa upp och kör `Repovakten.bat` (Windows) eller `./repovakten.sh` (macOS/Linux). Kräver Python 3.11+, PySide6 och segno (`pip install PySide6 segno`).' \
               '' \
               'Releasen uppdateras automatiskt vid ny kod på branchen – versionsnumret höjs först när användaren säger till.' \
               > /tmp/notes.md

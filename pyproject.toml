@@ -29,9 +29,9 @@ dependencies = []
 repovakten-gui = "repovakten.gui:main"
 
 [project.optional-dependencies]
-# Gränssnittet byggs med Qt för Python (PySide6).
-gui = ["PySide6>=6.7"]
-dev = ["pytest>=8"]
+# Gränssnittet byggs med Qt för Python (PySide6); segno ritar Swish-QR lokalt.
+gui = ["PySide6>=6.7", "segno>=1.6"]
+dev = ["pytest>=8", "segno>=1.6"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/repovakten"]
