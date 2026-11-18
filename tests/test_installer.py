@@ -59,7 +59,31 @@ def seed_install(
 
 def test_app_install_dir_saniterar(tmp_path, monkeypatch):
     monkeypatch.setenv("REPOVAKTEN_APPS", str(tmp_path))
-    assert app_install_dir("Tokke2/Appen") == tmp_path / "Tokke2" / "Appen"
+    # Platt layout: appens namn direkt i roten – ingen ägar- eller
+    # versionsnivå i mappnamnet.
+    assert app_install_dir("Tokke2/Appen") == tmp_path / "Appen"
+
+
+def test_blandat_zip_landar_utan_versionsmapp(tmp_path, store: Store):
+    """Rotmapp + lösa filer: innehållet landar rent, utan versionsmapp."""
+    archive = make_zip(
+        tmp_path / "paket.zip",
+        {"MinApp-2.1.0/app.exe": b"bin", "MinApp-2.1.0/lib/x.dll": b"dll", "README.md": b"r"},
+    )
+    install_dir = tmp_path / "install"
+    install_from_zip(
+        archive,
+        store=store,
+        repo_id=7,
+        tag="v2.1.0",
+        repo_full_name="tokke2/MinApp",
+        install_dir=install_dir,
+        backup_root=tmp_path / "backups",
+    )
+    assert (install_dir / "app.exe").read_bytes() == b"bin"
+    assert (install_dir / "lib" / "x.dll").exists()
+    assert (install_dir / "README.md").exists()
+    assert not (install_dir / "MinApp-2.1.0").exists()  # ingen Vnr-mapp
 
 
 # ------------------------------------------------------------- install

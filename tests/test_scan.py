@@ -36,7 +36,7 @@ def sha(data: bytes) -> str:
 def test_standardlayout_registreras_med_manifest(tmp_path, store):
     add_repo(store)
     folder = tmp_path / "appar"
-    app_dir = folder / "tokke2" / "recept"
+    app_dir = folder / "recept"
     app_dir.mkdir(parents=True)
     (app_dir / "app.py").write_bytes(b"print(1)\n")
     (app_dir / "storage").mkdir()
@@ -80,10 +80,46 @@ def test_mappen_sjalv_kan_vara_appen(tmp_path, store):
     assert [hit.path for hit in report.hits] == [folder]
 
 
+def test_aldre_layout_med_agare_hittas_också(tmp_path, store):
+    add_repo(store)
+    folder = tmp_path / "appar"
+    app_dir = folder / "tokke2" / "recept"  # äldre layout
+    app_dir.mkdir(parents=True)
+    (app_dir / "app.py").write_bytes(b"x")
+
+    report = scan_folder(folder, store)
+    assert [hit.path for hit in report.hits] == [app_dir]
+
+
+def test_registrerad_mapp_har_foretrede(tmp_path, store):
+    add_repo(store)
+    folder = tmp_path / "appar"
+    flat = folder / "recept"
+    legacy = folder / "tokke2" / "recept"
+    flat.mkdir(parents=True)
+    legacy.mkdir(parents=True)
+    (flat / "a.py").write_bytes(b"flat")
+    (legacy / "a.py").write_bytes(b"legacy")
+    store.set_install(
+        InstallRecord(
+            repo_id=1,
+            repo_full_name="tokke2/recept",
+            installed_tag="v2.0.0",
+            install_dir=str(legacy),
+            installed_at="2026-01-01T00:00:00Z",
+            updated_at="2026-01-01T00:00:00Z",
+            files={"a.py": sha(b"legacy")},
+        )
+    )
+
+    report = scan_folder(folder, store)
+    assert [hit.path for hit in report.hits] == [legacy]  # den gamla vinner
+
+
 def test_redan_kand_app_hoppas_over(tmp_path, store):
     add_repo(store)
     folder = tmp_path / "appar"
-    app_dir = folder / "tokke2" / "recept"
+    app_dir = folder / "recept"
     app_dir.mkdir(parents=True)
     (app_dir / "app.py").write_bytes(b"x")
     store.set_install(
@@ -123,8 +159,8 @@ def test_okanda_kataloger_rapporteras_men_rors_inte(tmp_path, store):
 def test_tom_eller_endast_bevarad_katalog_raknas_inte(tmp_path, store):
     add_repo(store)
     folder = tmp_path / "appar"
-    (folder / "tokke2" / "recept" / "storage").mkdir(parents=True)
-    (folder / "tokke2" / "recept" / "storage" / "d.json").write_bytes(b"{}")
+    (folder / "recept" / "storage").mkdir(parents=True)
+    (folder / "recept" / "storage" / "d.json").write_bytes(b"{}")
 
     report = scan_folder(folder, store)
     assert report.hits == []
@@ -158,7 +194,7 @@ def test_install_from_zip_utan_install_dir_foljer_vald_rot(tmp_path, store):
     install_from_zip(
         zip_path, store=store, repo_id=5, tag="v1.0.0", repo_full_name="tokke2/recept"
     )
-    assert (tmp_path / "appar" / "tokke2" / "recept" / "app.py").exists()
+    assert (tmp_path / "appar" / "recept" / "app.py").exists()
 
 
 def test_uppdatering_star_kvar_i_registrerad_mapp(tmp_path, store):
@@ -176,6 +212,6 @@ def test_uppdatering_star_kvar_i_registrerad_mapp(tmp_path, store):
         zip2, store=store, repo_id=5, tag="v1.1.0", repo_full_name="tokke2/recept"
     )
 
-    target = tmp_path / "appar" / "tokke2" / "recept" / "app.py"
+    target = tmp_path / "appar" / "recept" / "app.py"
     assert target.read_text(encoding="utf-8") == "v2\n"
     assert not (tmp_path / "annat").exists()

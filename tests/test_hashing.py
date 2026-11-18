@@ -125,12 +125,22 @@ def test_hash_zip_stripar_gemensam_rot(tmp_path):
     assert set(hash_zip(archive)) == {"app.py", "lib/b.py"}
 
 
-def test_hash_zip_rot_med_toppfiler_strippas_inte(tmp_path):
+def test_hash_zip_rot_med_toppfiler_strippas_delvis(tmp_path):
     archive = make_zip(
         tmp_path / "release.zip",
-        {"MyApp-1.0/app.py": b"a", "README": b"r"},
+        {"MyApp-1.0/app.py": b"a", "MyApp-1.0/lib/b.py": b"b", "README": b"r"},
     )
-    assert set(hash_zip(archive)) == {"MyApp-1.0/app.py", "README"}
+    # Rotkatalogen strippas även när lösa filer ligger i roten – innehållet
+    # landar rent utan versionsmapp och de lösa filerna behålls.
+    assert set(hash_zip(archive)) == {"app.py", "lib/b.py", "README"}
+
+
+def test_hash_zip_flera_toppkataloger_strippas_inte(tmp_path):
+    archive = make_zip(
+        tmp_path / "release.zip",
+        {"A/app.py": b"a", "B/app.py": b"b"},
+    )
+    assert set(hash_zip(archive)) == {"A/app.py", "B/app.py"}
 
 
 def test_hash_zip_bevarad_inne_i_rot_hoppas_over(tmp_path):

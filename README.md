@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (211 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (215 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -41,7 +41,7 @@ portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 211 tester
+.venv/bin/python -m pytest          # 215 tester
 ```
 
 ## Så fungerar det
@@ -98,6 +98,10 @@ python3 -m venv .venv
    installerade appar…): hittade appar registreras med SHA-256-manifest så
    att de kan uppdateras på plats, och uppdateringar hamnar alltid där
    appen redan ligger. Bevarade mappar som `storage/` räknas aldrig.
+   **Klara mappar**: varje app läggs direkt i vald mapp med sitt namn
+   (`<mapp>/<Appnamn>`, t.ex. `D:\Program\ArkivPiloten`) – ingen ägarnivå
+   och aldrig versionsnummer i mappnamnet. Versionsrotar i ZIP-paket
+   (t.ex. `MinApp-2.1.0/…`) strippas så att innehållet landar rent.
 
 ## Säkerhet och garantier
 
@@ -170,7 +174,7 @@ src/repovakten/
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             211 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             215 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

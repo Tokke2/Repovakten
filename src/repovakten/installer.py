@@ -85,12 +85,15 @@ def _sanitize_segment(part: str) -> str:
 
 
 def app_install_dir(full_name: str, root: Path | None = None) -> Path:
-    """Standardplacering för en app: ``<root>/<ägare>/<namn>``."""
+    """Placering för en app: ``<root>/<namn>`` – platt och rent.
+
+    Mappen namnges efter appen (repo-namnet, t.ex. ``ArkivPiloten``) –
+    aldrig med ägare eller versionsnummer. Uppdateringar sker på plats i
+    samma mapp, så inga versionsmappar samlas upp.
+    """
     base = Path(root) if root else default_install_root()
-    parts = full_name.split("/", 1)
-    if len(parts) == 2:
-        return base / _sanitize_segment(parts[0]) / _sanitize_segment(parts[1])
-    return base / _sanitize_segment(full_name)
+    name = full_name.split("/", 1)[-1]
+    return base / _sanitize_segment(name)
 
 
 def install_root_for(store: "Store | None" = None) -> Path:

@@ -118,19 +118,43 @@ def hash_tree(root: Path, preserved: Iterable[str] = ()) -> dict[str, str]:
     return {rel: sha256_file(path) for rel, path in iter_tree(root, preserved)}
 
 
-def common_root_prefix(paths: Iterable[str]) -> str | None:
-    """Returnera den gemensamma rotkatalogen om alla sökvägar delar exakt en.
+_VERSIONED_NAME = re.compile(r"[-_. ]v?\d[\d.]*$")
+_VERSION_ONLY_NAME = re.compile(r"v?\d[\d.]*")
 
-    Regeln är densamma för hashning och uppackning: alla filer måste ligga
-    under samma toppnivåkatalog och ingen får ligga direkt i roten. Om så är
-    fallet returneras katalognamnet (t.ex. ``MyApp-1.2.0``), annars ``None``.
+
+def _looks_versioned(name: str) -> bool:
+    """Sant om namnet ser ut som en versionsmapp (t.ex. ``MinApp-2.1.0``)."""
+    return bool(_VERSIONED_NAME.search(name) or _VERSION_ONLY_NAME.fullmatch(name))
+
+
+def common_root_prefix(paths: Iterable[str]) -> str | None:
+    """Returnera den rotkatalog som ska strippas, om någon.
+
+    Reglerna är desamma för hashning och uppackning:
+
+    * Alla filer under samma toppnivåkatalog och ingen direkt i roten –
+      katalognamnet strippas (t.ex. ``MyApp-1.2.0``).
+    * Arkiv som blandar **en** versionslik toppnivåkatalog (t.ex.
+      ``MinApp-2.1.0``) med lösa filer direkt i roten – katalognamnet
+      strippas för sitt innehåll medan de lösa filerna behålls. Då landar
+      innehållet rent utan versionsmappar. Riktiga innehållskataloger
+      (``lib/``, ``ui/``) strippas aldrig på det här sättet.
+    * Annars (flera toppnivåkataloger, icke-versionslik katalog blandad med
+      lösa filer, eller en lös fil med samma namn som katalogen) strippas
+      ingenting.
     """
-    entries = list(paths)
+    entries = [rel for rel in paths if rel]
     if not entries:
         return None
     first_components = {rel.split("/", 1)[0] for rel in entries}
     if len(first_components) == 1 and all("/" in rel for rel in entries):
         return next(iter(first_components))
+    dir_names = {rel.split("/", 1)[0] for rel in entries if "/" in rel}
+    loose_names = {rel for rel in entries if "/" not in rel}
+    if len(dir_names) == 1 and not (dir_names & loose_names):
+        (name,) = dir_names
+        if _looks_versioned(name):
+            return name
     return None
 
 
@@ -168,7 +192,7 @@ def zip_entries(
     seen: set[str] = set()
     total_uncompressed = 0
     for rel, info in raw:
-        if prefix:
+        if prefix and rel.startswith(prefix + "/"):
             rel = rel[len(prefix) + 1:]
         if is_preserved(rel, preserved):
             continue

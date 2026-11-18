@@ -7,10 +7,11 @@ vanliga flödet (filrapport, backup, rollback).
 
 Sökmönster per app (första katalogen med filer vinner):
 
-1. ``<mapp>/<ägare>/<namn>`` – samma layout som Repovakten installerar med.
-2. ``<mapp>/<namn>`` – löst placerad kopia.
+1. ``<mapp>/<namn>`` – samma platta layout som Repovakten installerar med.
+2. ``<mapp>/<ägare>/<namn>`` – äldre layout, hittas också.
 3. mappen själv, om dess namn matchar appen (en app per mapp).
 
+Redan registrerade appar matchas mot sin registrerade katalog först.
 Bevarade sökvägar (t.ex. ``storage/``) räknas aldrig in i manifestet.
 """
 from __future__ import annotations
@@ -76,9 +77,13 @@ class ScanReport:
 def _candidate_dirs(folder: Path, full_name: str, name: str) -> list[Path]:
     """Kandidatkataloger för appen, i prioritetsordning."""
     candidates = [
-        app_install_dir(full_name, root=folder),  # <mapp>/<ägare>/<namn>
-        folder / _sanitize_segment(name),  # <mapp>/<namn>
+        app_install_dir(full_name, root=folder),  # <mapp>/<namn> – platt layout
     ]
+    if "/" in full_name:
+        owner, _, repo = full_name.partition("/")
+        candidates.append(
+            folder / _sanitize_segment(owner) / _sanitize_segment(repo)
+        )  # äldre layout med ägarnivå
     if _sanitize_segment(folder.name) == _sanitize_segment(name):
         candidates.append(folder)  # mappen själv är appen
     return candidates
@@ -101,13 +106,18 @@ def scan_folder(folder: Path, store: Store) -> ScanReport:
         name = entry.repo.name
         full_name = entry.repo.full_name
         preserve = list(entry.preserve_paths) or list(DEFAULT_PRESERVE_PATHS)
-        for path in _candidate_dirs(folder, full_name, name):
+        candidates = _candidate_dirs(folder, full_name, name)
+        existing = store.get_install(entry.repo.id)
+        if existing is not None and Path(existing.install_dir) in candidates:
+            # Den redan registrerade katalogen har företräde.
+            candidates.remove(Path(existing.install_dir))
+            candidates.insert(0, Path(existing.install_dir))
+        for path in candidates:
             if not path.is_dir():
                 continue
             files = hash_tree(path, preserve)
             if not files:
                 continue  # tom katalog (eller bara bevarat innehåll) räknas inte
-            existing = store.get_install(entry.repo.id)
             if existing is not None:
                 report.hits.append(
                     ScanHit(entry.repo.id, full_name, path, len(files), registered=False)
