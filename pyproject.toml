@@ -26,6 +26,7 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
+repovakten = "repovakten.__main__:main"
 repovakten-gui = "repovakten.gui:main"
 
 [project.optional-dependencies]

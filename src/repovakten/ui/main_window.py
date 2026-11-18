@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import autostart
 from ..blocking import block_app, is_blocked, unblock_app
 from ..catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from ..errors import InstallationBlockedError, RepovaktenError
@@ -145,10 +146,16 @@ class MainWindow(QMainWindow):
         self.addAction(open_action)
 
     def _build_menu(self) -> None:
-        """Menyrad – donationsdialogen nås via Hjälp → Stöd projektet."""
+        """Menyrad – donation, uppdateringar och autostart nås via menyn."""
         menubar = self.menuBar()
 
         file_menu = menubar.addMenu("&Arkiv")
+        self._autostart_action = QAction("Starta med datorn", self)
+        self._autostart_action.setCheckable(True)
+        self._autostart_action.setChecked(autostart.is_enabled())
+        self._autostart_action.triggered.connect(self._toggle_autostart)
+        file_menu.addAction(self._autostart_action)
+        file_menu.addSeparator()
         quit_action = QAction("&Avsluta", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
@@ -166,6 +173,21 @@ class MainWindow(QMainWindow):
         about_action = QAction("&Om Repovakten", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+
+    def _toggle_autostart(self, checked: bool = False) -> None:
+        """Starta med datorn: registrera/avregistrera autostart (alla OS)."""
+        try:
+            if checked:
+                message = autostart.enable()
+            else:
+                autostart.disable()
+                message = "Autostart av – Repovakten startas inte längre med datorn."
+        except RepovaktenError as exc:
+            QMessageBox.warning(self, "Autostart", str(exc))
+            self._autostart_action.setChecked(autostart.is_enabled())
+            return
+        self._status_label.setText(message)
+        self._autostart_action.setChecked(autostart.is_enabled())
 
     def show_donation_dialog(self) -> None:
         """Öppna donator-dialogen (Swish-QR, PayPal, Ko-fi)."""

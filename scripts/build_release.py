@@ -22,13 +22,13 @@ DIST = ROOT / "dist"
 BAT = """@echo off
 rem Starta Repovakten (kräver Python 3.11+ och PySide6).
 set PYTHONPATH=%~dp0
-python -m repovakten.gui %*
+python -m repovakten %*
 """
 
 SH = """#!/bin/sh
 # Starta Repovakten (kräver Python 3.11+ och PySide6).
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PYTHONPATH="$DIR" exec python3 -m repovakten.gui "$@"
+PYTHONPATH="$DIR" exec python3 -m repovakten "$@"
 """
 
 

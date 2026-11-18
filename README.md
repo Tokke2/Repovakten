@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (176 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (188 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -20,12 +20,28 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
   versionsspecifika finesser så den kör överallt från 3.11 och uppåt)
 - För GUI: `pip install repovakten[gui]` (PySide6 + segno)
 
+## Starta appen
+
+```bash
+python -m repovakten                      # GUI – samma på Windows, macOS och Linux
+python -m repovakten --autostart          # minimerat (läget som autostart använder)
+python -m repovakten --enable-autostart   # starta med datorn
+python -m repovakten --disable-autostart  # stäng av autostart
+python -m repovakten --version
+```
+
+Autostart fungerar på **Windows** (registret `HKCU\...\Run`), **macOS**
+(LaunchAgent i `~/Library/LaunchAgents`) och **Linux** (XDG-autostart) –
+samma sak via kryssrutan **Arkiv → Starta med datorn** i appen. Från den
+portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
+(och `--autostart` skickas vidare).
+
 ## Utveckling
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 176 tester
+.venv/bin/python -m pytest          # 188 tester
 ```
 
 ## Så fungerar det
@@ -111,11 +127,14 @@ src/repovakten/
   errors.py        Felhierarki
   donation.py      Donationer: Swish-QR (C-format), PayPal, Ko-fi (Qt-fri)
   selfupdate.py    Självuppdatering: jämför och uppdaterar den körande koden
+  autostart.py     Autostart vid inloggning: Windows-registret, macOS
+                   LaunchAgent, Linux XDG (Qt-fri)
+  __main__.py      Gemensam startpunkt: `python -m repovakten` (alla OS)
   gui.py           Startpunkt: `repovakten-gui` / `python -m repovakten.gui`
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             176 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             188 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

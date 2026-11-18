@@ -6,7 +6,7 @@ import sys
 from . import __version__
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, start_minimized: bool = False) -> int:
     try:
         from PySide6.QtWidgets import QApplication
     except ImportError:
@@ -23,7 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName("Repovakten")
     app.setApplicationVersion(__version__)
     window = MainWindow()
-    window.show()
+    if start_minimized:
+        window.showMinimized()  # autostartläge: fönstret startar minimerat
+    else:
+        window.show()
     return app.exec()
 
 
