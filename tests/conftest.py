@@ -17,6 +17,7 @@ def _isolated_repovakten_home(monkeypatch, tmp_path):
     monkeypatch.setenv("REPOVAKTEN_HOME", str(tmp_path / "repovakten-home"))
     monkeypatch.setenv("REPOVAKTEN_APPS", str(tmp_path / "repovakten-apps"))
     monkeypatch.setenv("REPOVAKTEN_BACKUPS", str(tmp_path / "repovakten-backups"))
+    monkeypatch.setenv("REPOVAKTEN_LOGS", str(tmp_path / "repovakten-logs"))
 
 
 # ---------------------------------------------------------------- API-JSON

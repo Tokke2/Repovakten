@@ -1,9 +1,10 @@
 """Bygg en portabel ZIP av Repovakten för GitHub-releasen.
 
-ZIP:en innehåller paketet ``repovakten/``, startskript för Windows och
-Unix, README och VERSION – allt under en gemensam rotkatalog så att
-Repovaktens egen installerare kan packa upp den korrekt (roten strippas
-vid installation).
+ZIP:en innehåller **endast aktiva filer**: paketet ``repovakten/`` (rena
+``.py``-moduler som faktiskt körs) och startskript för Windows och Unix –
+allt under en gemensam rotkatalog så att Repovaktens egen installerare kan
+packa upp den korrekt (roten strippas vid installation). Ingen
+dokumentation, metadata, cachar eller loggar följer med.
 
 Körs av GitHub Actions vid varje push till branchen för att hålla
 releasen v0.0.1 uppdaterad med ny kod. Versionsnumret höjs endast när
@@ -37,6 +38,13 @@ def read_version() -> str:
     return str(data["project"]["version"])
 
 
+def active_package_files() -> list[Path]:
+    """De aktiva modulfilerna – bara ``.py`` i paketet, aldrig cachar."""
+    return sorted(
+        path for path in SRC.rglob("*.py") if "__pycache__" not in path.parts
+    )
+
+
 def build_zip(output_dir: Path) -> Path:
     version = read_version()
     root_name = f"Repovakten-{version}"
@@ -45,15 +53,12 @@ def build_zip(output_dir: Path) -> Path:
     if zip_path.exists():
         zip_path.unlink()
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(SRC.rglob("*")):
-            if path.is_file() and "__pycache__" not in path.parts:
-                zf.write(path, f"{root_name}/repovakten/{path.relative_to(SRC)}")
+        for path in active_package_files():
+            zf.write(path, f"{root_name}/repovakten/{path.relative_to(SRC)}")
         zf.writestr(f"{root_name}/Repovakten.bat", BAT)
         sh_info = zipfile.ZipInfo(f"{root_name}/repovakten.sh")
         sh_info.external_attr = 0o755 << 16
         zf.writestr(sh_info, SH)
-        zf.writestr(f"{root_name}/VERSION", version + "\n")
-        zf.writestr(f"{root_name}/README.md", (ROOT / "README.md").read_text(encoding="utf-8"))
     validate(zip_path)
     return zip_path
 

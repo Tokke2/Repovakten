@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (188 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (200 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -41,7 +41,7 @@ portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 188 tester
+.venv/bin/python -m pytest          # 200 tester
 ```
 
 ## Så fungerar det
@@ -106,6 +106,32 @@ python3 -m venv .venv
 - Tillståndsfilen `state.json` skrivs atomiskt (tempfil + `os.replace`) och
   den tidigare versionen sparas som `state.json.bak` om filen skulle skadas.
 - Synken läser bara metadata och rör aldrig installationsmappar.
+- Release-ZIP:en innehåller **endast aktiva filer** – paketets `.py`-moduler
+  och startskripten. Ingen dokumentation, metadata, cachar eller loggar.
+
+## Loggar och felkoder
+
+Appen loggar i en egen mapp i appmappen: `<appmapp>/logs/repovakten.log`
+(roteras, 4 × 1 MB). Varje fel får en **felkod** som både skrivs till
+loggen och visas i dialogen – koden kan citeras vid en felrapport:
+
+| Kod | Vad |
+|---|---|
+| `SYNK-001` | Synk mot GitHub misslyckades |
+| `INSTALL-001` | Paketet kunde inte hämtas eller jämföras |
+| `INSTALL-002` | Installationen misslyckades (återställd) |
+| `INSTALL-003` | Appen är spärrad av admin |
+| `UPPDATERA-001` | Kunde inte söka uppdatering |
+| `UPPDATERA-002` | Självuppdateringen misslyckades |
+| `AUTOSTART-001` | Autostart kunde inte ställas in |
+| `LAGRING-001` | `state.json` kunde inte läsas eller skrivas |
+| `DONATION-001` | Donationsdialogen kunde inte visas |
+| `QT-001` / `QT-002` | Varning / kritiskt fel från Qt-ramverket |
+| `ALLMANT-001` | Övriga fel |
+
+Varje session börjar med versions- och miljöinfo. Qt:s egna varningar och
+fel fångas automatiskt och hamnar i samma logg med sina koder. Om
+appmappen är skrivskyddad används `~/.repovakten/logs` i stället.
 
 ## Arkitektur
 
@@ -127,6 +153,7 @@ src/repovakten/
   errors.py        Felhierarki
   donation.py      Donationer: Swish-QR (C-format), PayPal, Ko-fi (Qt-fri)
   selfupdate.py    Självuppdatering: jämför och uppdaterar den körande koden
+  applog.py        Loggning med felkoder i <appmapp>/logs/ (Qt-fri)
   autostart.py     Autostart vid inloggning: Windows-registret, macOS
                    LaunchAgent, Linux XDG (Qt-fri)
   __main__.py      Gemensam startpunkt: `python -m repovakten` (alla OS)
@@ -134,7 +161,7 @@ src/repovakten/
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
                    (filrapport, paketval, donation), bakgrundsarbetare
                    (synk/nedladdning/installation), svenska statustexter
-tests/             188 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             200 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg

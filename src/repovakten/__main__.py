@@ -55,6 +55,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
+    from repovakten import applog
+
+    applog.setup()  # egen loggmapp i appmappen – logga även CLI-lägen
+
     if args.version:
         print(f"Repovakten {__version__}")
         return 0

@@ -11,8 +11,8 @@ körande koden själv:
 3. Visa filrapporten och låt användaren godkänna – inget ändras annars.
 4. Installera med backup och rullning tillbaka precis som alltid.
 
-Endast ``repovakten/``-paketet uppdateras (startskript, VERSION och
-README runt omkring rörs inte). ``__pycache__`` bevaras alltid.
+Endast ``repovakten/``-paketet uppdateras (startskripten runt omkring
+rörs inte). ``__pycache__`` bevaras alltid.
 """
 from __future__ import annotations
 
@@ -51,8 +51,8 @@ def package_dir() -> Path:
 def package_files_in_zip(zip_path: Path) -> dict[str, str]:
     """``{sökväg i paketet: sha256}`` för releasens ``repovakten/``-filer.
 
-    Övriga filer i ZIP:en (README, startskript …) hör inte till
-    självuppdateringen. Arkivet valideras (zip-slip med flera avvisas).
+    Övriga filer i ZIP:en (startskripten) hör inte till självuppdateringen.
+    Arkivet valideras (zip-slip med flera avvisas).
     """
     files = hash_zip(Path(zip_path), _PRESERVED)
     return {

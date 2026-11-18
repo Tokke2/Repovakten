@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import autostart
+from .. import applog, autostart
 from ..blocking import block_app, is_blocked, unblock_app
 from ..catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from ..errors import InstallationBlockedError, RepovaktenError
@@ -183,11 +183,28 @@ class MainWindow(QMainWindow):
                 autostart.disable()
                 message = "Autostart av – Repovakten startas inte längre med datorn."
         except RepovaktenError as exc:
-            QMessageBox.warning(self, "Autostart", str(exc))
+            self._fail("Autostart", str(exc), applog.AUTOSTART_FEL, exc=exc)
             self._autostart_action.setChecked(autostart.is_enabled())
             return
         self._status_label.setText(message)
         self._autostart_action.setChecked(autostart.is_enabled())
+
+    def _fail(
+        self,
+        title: str,
+        message: str,
+        code: str,
+        *,
+        critical: bool = False,
+        exc: BaseException | None = None,
+    ) -> None:
+        """Logga felet med felkod och visa det – användaren kan citera koden."""
+        applog.error(code, f"{title}: {message}", exc=exc)
+        text = f"{message}\n\nFelkod: {code} (finns även i loggen)"
+        if critical:
+            QMessageBox.critical(self, title, text)
+        else:
+            QMessageBox.warning(self, title, text)
 
     def show_donation_dialog(self) -> None:
         """Öppna donator-dialogen (Swish-QR, PayPal, Ko-fi)."""
@@ -220,17 +237,11 @@ class MainWindow(QMainWindow):
         if not auto:
             self._status_label.setText("Söker uppdatering av Repovakten…")
         worker = SelfCheckWorker(self._state_path, client_factory=self._client_factory)
-        thread = QThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: self._on_self_check_finished(result, auto))
-        worker.finished.connect(thread.quit)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(self._clear_self_check_thread)
-        self._self_thread = thread
-        self._self_worker = worker  # behåll referens tills tråden är klar
-        thread.start()
+        self._start_worker(
+            worker,
+            lambda result: self._on_self_check_finished(result, auto),
+            self_update=True,
+        )
 
     def _clear_self_check_thread(self) -> None:
         self._self_thread = None
@@ -240,9 +251,10 @@ class MainWindow(QMainWindow):
         if isinstance(result, Exception):
             message = f"Kunde inte söka uppdatering av Repovakten: {result}"
             if auto:
+                applog.error(applog.UPPDATERA_SOK_FEL, message, exc=result)
                 self._status_label.setText(message)
             else:
-                QMessageBox.warning(self, "Sök uppdatering", message)
+                self._fail("Sök uppdatering", message, applog.UPPDATERA_SOK_FEL, exc=result)
             self._show_app_updates(quiet=auto)
             return
         plan = result
@@ -277,14 +289,16 @@ class MainWindow(QMainWindow):
 
     def _on_self_install_finished(self, result) -> None:
         if isinstance(result, Exception):
-            QMessageBox.warning(
-                self,
+            self._fail(
                 "Självuppdatering",
                 f"Uppdateringen misslyckades: {result}\n\nDen gamla kopian är återställd.",
+                applog.UPPDATERA_FEL,
+                exc=result,
             )
             self._status_label.setText("Självuppdateringen misslyckades – gamla kopian kvar.")
             self._discard_self_plan()
             return
+        applog.info(f"Självuppdaterad till {result.tag}")
         backup_text = (
             f"\n\nTidigare kopia sparad i:\n{result.backup_dir}" if result.backup_dir else ""
         )
@@ -422,9 +436,10 @@ class MainWindow(QMainWindow):
     def _on_sync_finished(self, result) -> None:
         self._set_busy(False)
         if isinstance(result, Exception):
-            QMessageBox.warning(self, "Synk misslyckades", str(result))
+            self._fail("Synk misslyckades", str(result), applog.SYNK_FEL, exc=result)
             self._status_label.setText(f"Synk misslyckades: {result}")
         else:
+            applog.info(f"Synk klar: {result.summary_swedish()}")
             self.refresh()
             self._status_label.setText(result.summary_swedish())
         if getattr(self, "_pending_startup_check", False):
@@ -490,7 +505,12 @@ class MainWindow(QMainWindow):
     def _on_prepare_finished(self, result, repo_id: int) -> None:
         self._set_busy(False)
         if isinstance(result, Exception):
-            QMessageBox.warning(self, "Kunde inte förbereda installation", str(result))
+            self._fail(
+                "Kunde inte förbereda installation",
+                str(result),
+                applog.INSTALL_FORBEREDELSE_FEL,
+                exc=result,
+            )
             self._status_label.setText(f"Förberedelse misslyckades: {result}")
             return
         prepared: PreparedInstall = result
@@ -521,14 +541,23 @@ class MainWindow(QMainWindow):
     def _on_install_finished(self, result) -> None:
         self._set_busy(False)
         if isinstance(result, InstallationBlockedError):
-            QMessageBox.warning(self, "Spärrad", str(result))
+            self._fail("Spärrad", str(result), applog.INSTALL_SPARRAD)
             self._status_label.setText("Installation avbruten – appen är spärrad.")
             self.refresh()
             return
         if isinstance(result, Exception):
-            QMessageBox.critical(self, "Installation misslyckades", str(result))
+            self._fail(
+                "Installation misslyckades",
+                str(result),
+                applog.INSTALL_FEL,
+                critical=True,
+                exc=result,
+            )
             self._status_label.setText(f"Installation misslyckades: {result}")
             return
+        applog.info(
+            f"Installerad: {result.record.repo_full_name} {result.record.installed_tag}"
+        )
         self.refresh()
         backup_text = f"\nTidigare kopia sparad i:\n{result.backup_dir}" if result.backup_dir else ""
         QMessageBox.information(
@@ -574,17 +603,39 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------- trådar
 
-    def _start_worker(self, worker, on_finished) -> None:
+    def _start_worker(self, worker, on_finished, *, self_update: bool = False) -> None:
+        """Starta arbetaren i egen tråd – klart-signalen hanteras i huvudtråden.
+
+        Vi kopplar via en QMainWindow-metod med QueuedConnection. En lambda
+        eller partial kopplad direkt mot ``finished`` kan annars köras i
+        arbetstråden (beror på PySide6-version) – då skapas dialoger och
+        widgets i fel tråd, vilket ger Qt-varningar om föräldrar, timrar
+        och omritningar.
+        """
+        worker._ui_callback = on_finished
         thread = QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.finished.connect(on_finished)
+        worker.finished.connect(self._worker_finished, Qt.QueuedConnection)
         worker.finished.connect(thread.quit)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        self._thread = thread
-        self._worker = worker
+        if self_update:
+            thread.finished.connect(self._clear_self_check_thread)
+            self._self_thread = thread
+            self._self_worker = worker  # behåll referens tills tråden är klar
+        else:
+            self._thread = thread
+            self._worker = worker
         thread.start()
+
+    def _worker_finished(self, result) -> None:
+        """Körs alltid i huvudtråden – anropar det sparade klart-callbacket."""
+        worker = self.sender()
+        callback = getattr(worker, "_ui_callback", None) if worker is not None else None
+        if callback is not None:
+            worker._ui_callback = None
+            callback(result)
 
     def _set_busy(self, busy: bool, message: str | None = None) -> None:
         self._busy = busy

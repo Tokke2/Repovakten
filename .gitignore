@@ -221,3 +221,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Repovakten – körningsloggar (applog skriver i appmappens logs/)
+logs/
+src/logs/
