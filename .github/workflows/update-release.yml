@@ -1,0 +1,56 @@
+name: Uppdatera release
+
+# Håller releasen v0.0.1 uppdaterad med ny kod. Versionsnumret höjs
+# ENDAST när användaren säger till (ändra RELEASE_TAG då).
+on:
+  push:
+    branches: ["arena/87ac4a72-repovakten"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: v0.0.1
+
+jobs:
+  update-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installera och testa
+        run: |
+          pip install -e ".[dev]"
+          python -m pytest -q
+      - name: Bygg portabel ZIP
+        run: python scripts/build_release.py
+      - name: Skapa eller uppdatera releasen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ZIP="$(ls dist/Repovakten-*-portable.zip)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$ZIP" --clobber
+            echo "Uppdaterade $RELEASE_TAG med $ZIP"
+          else
+            printf '%s\n' \
+              'Första releasen av Repovakten – installationshanterare för GitHub-appar med svenskt Qt-gränssnitt.' \
+              '' \
+              '**Portabel ZIP:** packa upp och kör `Repovakten.bat` (Windows) eller `./repovakten.sh` (macOS/Linux). Kräver Python 3.11+ och PySide6 (`pip install PySide6`).' \
+              '' \
+              'Releasen uppdateras automatiskt vid ny kod på branchen – versionsnumret höjs först när användaren säger till.' \
+              > /tmp/notes.md
+            gh release create "$RELEASE_TAG" "$ZIP" \
+              --target "$GITHUB_SHA" \
+              --title "Repovakten $RELEASE_TAG" \
+              --notes-file /tmp/notes.md
+            echo "Skapade $RELEASE_TAG"
+          fi

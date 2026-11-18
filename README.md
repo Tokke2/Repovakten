@@ -4,10 +4,12 @@
 med svenskt gränssnitt för Windows, macOS och Linux. Den installerar appar
 på den här datorn, inte på något webbhotell.
 
-> **Status: 0.1.0 – kärnlogik klar, gränssnittet byggs härnäst.**
-> Katalog, synk, spärrar, releaseurval och SHA-256-filjämförelse är
-> implementerade och testade (109 tester). GUI:t byggs med **Qt för Python
-> (PySide6)** och installationen (med backup) kommer i nästa steg.
+> **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
+> SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
+> (PySide6) är implementerade och testade (128 tester). Releasen uppdateras
+> automatiskt vid ny kod på branchen – versionsnumret höjs först när
+> användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
+> Repovakten bättre än konkurrenterna.
 
 Namnet **Repovakten** valdes före Applotsen, Releasekollen, Paketvakten och
 Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
@@ -23,7 +25,7 @@ Reponavet eftersom bevakningen av konton och adminspärrarna är appens kärna.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 109 tester
+.venv/bin/python -m pytest          # 128 tester
 ```
 
 ## Så fungerar det
@@ -55,7 +57,7 @@ python3 -m venv .venv
    **nya**, **saknade** (saknas på disk enligt installationsmanifestet) och
    **utgående** filer. `storage/` (användardata) bevaras alltid och jämförs
    aldrig.
-6. **Fråga innan något ändras** *(flödet byggs i nästa steg)*: filrapporten
+6. **Fråga innan något ändras**: filrapporten
    kan stängas utan att installera. Vid godkännande kontrolleras spärren
    igen och den tidigare kopian sparas som backup. Nedladdade program körs
    **aldrig** automatiskt.
@@ -64,7 +66,7 @@ python3 -m venv .venv
 
 - Spärrar och installationer nycklas på repo-ID och följer med vid namnbyte.
 - `storage/` (och andra bevarade sökvägar) skrivs aldrig över och tas aldrig
-  bort – varken vid jämförelse eller (senare) vid installation.
+  bort – varken vid jämförelse eller vid installation.
 - ZIP-paket valideras: absoluta sökvägar, enhetsbokstäver och `..` avvisas
   (zip-slip), dubbletter efter normalisering avvisas, tak på antal filer och
   uppackad storlek.
@@ -102,13 +104,11 @@ tests/             128 tester (fejkad GitHub-transport, inga nätverksanrop)
 
 ## Kända begränsningar och nästa steg
 
-- **Gränssnitt (Qt/PySide6)**: svenskt UI, knapp "Synka nu", 15-minuterstimer,
-  katalogtabell, spärrknapp, paketval.
-- **Installation/uppdatering**: nedladdning, backup av tidigare kopia,
-  bevarande av `storage/`, omtest av spärren innan skrivning, aldrig körning
-  av nedladdade program.
 - **Paketering**: fristående fil per OS (t.ex. PyInstaller) för Windows,
-  macOS och Linux.
+  macOS och Linux. GUI:t kräver PySide6 (`pip install repovakten[gui]`)
+  och körs med `repovakten-gui` eller från releasens portabla ZIP.
+- **Paketformat**: endast uppladdade portabla ZIP-paket stöds i v1
+  (inte `.tar.gz`, `.7z` eller installerare – se [IDEER.md](IDEER.md) #11).
 - Prototyp fanns i arbetskopian av `Tokke2/lager` (`apphanterare/`,
   Tk/Python) men var inte tillgänglig här, så Repovakten byggdes på nytt
   från specifikationen – med Qt och senaste Python istället för Tk.
