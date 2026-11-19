@@ -196,6 +196,48 @@ class Store:
             settings.pop("install_root", None)
         self.save()
 
+    def get_theme(self) -> str:
+        """Aktivt tema: ``dark`` (standard) eller ``light``."""
+        self.load()
+        assert self._data is not None
+        value = (self._data.get("settings") or {}).get("theme")
+        return str(value) if value in ("dark", "light") else "dark"
+
+    def set_theme(self, name: str) -> None:
+        """Spara valt tema (``dark`` eller ``light``)."""
+        if name not in ("dark", "light"):
+            raise StoreError(f"Okänt tema: {name!r}")
+        self.load()
+        assert self._data is not None
+        self._data.setdefault("settings", {})["theme"] = name
+        self.save()
+
+    def get_window_geometry(self) -> list[int] | None:
+        """Sparad fönstergeometri ``[x, y, bredd, höjd]``, eller ``None``."""
+        self.load()
+        assert self._data is not None
+        value = (self._data.get("settings") or {}).get("window_geometry")
+        if isinstance(value, list) and len(value) == 4 and all(
+            isinstance(part, int) for part in value
+        ):
+            return list(value)
+        return None
+
+    def set_window_geometry(self, value: list[int] | None) -> None:
+        """Spara fönstrets läge och storlek (``None`` rensar)."""
+        self.load()
+        assert self._data is not None
+        settings = self._data.setdefault("settings", {})
+        if value is None:
+            settings.pop("window_geometry", None)
+        else:
+            if not (isinstance(value, list) and len(value) == 4 and all(
+                isinstance(part, int) for part in value
+            )):
+                raise StoreError("Fönstergeometri måste vara fyra heltal.")
+            settings["window_geometry"] = list(value)
+        self.save()
+
     def _entries(self) -> dict:
         self.load()
         assert self._data is not None

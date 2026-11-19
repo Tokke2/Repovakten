@@ -40,11 +40,26 @@ def main(argv: list[str] | None = None, *, start_minimized: bool = False) -> int
         return 2
 
     _install_qt_log_handler()
-    from .ui import MainWindow
+    from PySide6.QtGui import QFont
+
+    from .platforminfo import current_os
+    from .store import Store
+    from .ui import MainWindow, icons
+    from .ui.theme import build_stylesheet, font_families
 
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("Repovakten")
     app.setApplicationVersion(__version__)
+
+    # Design: typsnittskedja per OS, tema (sparat val) och appikon.
+    font = QFont()
+    font.setFamilies(font_families(current_os()))
+    font.setPointSize(10)
+    app.setFont(font)
+    store = Store()
+    app.setStyleSheet(build_stylesheet(store.get_theme()))
+    app.setWindowIcon(icons.app_icon())
+
     window = MainWindow()
     if start_minimized:
         window.showMinimized()  # autostartläge: fönstret startar minimerat

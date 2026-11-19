@@ -14,6 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, QTimer, Qt, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -29,6 +30,8 @@ from PySide6.QtWidgets import (
 )
 
 from .. import applog, autostart
+from . import icons
+from .theme import build_stylesheet, default_window_size
 from ..blocking import block_app, is_blocked, unblock_app
 from ..catalog import InstallStatus, build_catalog_rows, updates_for_installed_apps
 from ..errors import InstallationBlockedError, RepovaktenError
@@ -75,7 +78,7 @@ class MainWindow(QMainWindow):
         self._self_plan: object | None = None
 
         self.setWindowTitle("Repovakten")
-        self.resize(960, 560)
+        self._set_initial_geometry()  # fyll skärmbredden – sparat läge återställs
         self._build_ui()
 
         self._sync_timer = QTimer(self)
@@ -94,23 +97,29 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 14, 16, 12)
+        layout.setSpacing(10)
 
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
         toolbar.addWidget(QLabel("Bevakade konton:"))
         self._account_combo = QComboBox(self)
         self._account_combo.currentTextChanged.connect(self._on_account_changed)
         toolbar.addWidget(self._account_combo)
 
         add_account = QPushButton("Lägg till konto…")
+        add_account.setIcon(icons.icon(self, "konto_nytt"))
         add_account.clicked.connect(self.add_account)
         toolbar.addWidget(add_account)
 
         remove_account = QPushButton("Ta bort konto")
+        remove_account.setIcon(icons.icon(self, "konto_bort"))
         remove_account.clicked.connect(self.remove_account)
         toolbar.addWidget(remove_account)
 
         toolbar.addStretch(1)
         self._sync_button = QPushButton("Synka nu")
+        self._sync_button.setIcon(icons.icon(self, "synka"))
         self._sync_button.clicked.connect(self.sync_now)
         toolbar.addWidget(self._sync_button)
         layout.addLayout(toolbar)
@@ -122,54 +131,74 @@ class MainWindow(QMainWindow):
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(True)
+        self._table.setAlternatingRowColors(True)
+        self._table.setShowGrid(False)
         self._table.itemSelectionChanged.connect(self._update_action_buttons)
         layout.addWidget(self._table)
 
         actions = QHBoxLayout()
+        actions.setSpacing(8)
         self._install_button = QPushButton("Installera / Uppdatera…")
+        self._install_button.setObjectName("primary")  # accentfärgad huvudknapp
+        self._install_button.setIcon(icons.icon(self, "installera"))
         self._install_button.clicked.connect(self.install_selected)
         actions.addWidget(self._install_button)
 
         self._block_button = QPushButton("Spärra installation")
+        self._block_button.setIcon(icons.icon(self, "sparra"))
         self._block_button.clicked.connect(self.toggle_block_selected)
         actions.addWidget(self._block_button)
 
         github_button = QPushButton("Öppna på GitHub")
+        github_button.setIcon(icons.icon(self, "github"))
         github_button.clicked.connect(self.open_selected_on_github)
         actions.addWidget(github_button)
         actions.addStretch(1)
         layout.addLayout(actions)
 
         self._status_label = QLabel("Redo.")
+        self._status_label.setObjectName("statusLabel")
         self._status_label.setWordWrap(True)
         layout.addWidget(self._status_label)
 
         open_action = QAction("Synka nu", self)
+        open_action.setIcon(icons.icon(self, "synka"))
         open_action.triggered.connect(self.sync_now)
         self.addAction(open_action)
 
     def _build_menu(self) -> None:
-        """Menyrad – donation, uppdateringar och autostart nås via menyn."""
+        """Menyrad – inställningar, tema, donation och uppdateringar."""
         menubar = self.menuBar()
 
         file_menu = menubar.addMenu("&Arkiv")
         dir_action = QAction("Installationsmapp…", self)
+        dir_action.setIcon(icons.icon(self, "mapp"))
         dir_action.triggered.connect(self.choose_install_dir)
         file_menu.addAction(dir_action)
         scan_action = QAction("Sök installerade appar…", self)
+        scan_action.setIcon(icons.icon(self, "sok"))
         scan_action.triggered.connect(self.scan_for_installs)
         file_menu.addAction(scan_action)
         file_menu.addSeparator()
         self._autostart_action = QAction("Starta med datorn", self)
+        self._autostart_action.setIcon(icons.icon(self, "dator"))
         self._autostart_action.setCheckable(True)
         self._autostart_action.setChecked(autostart.is_enabled())
         self._autostart_action.triggered.connect(self._toggle_autostart)
         file_menu.addAction(self._autostart_action)
         file_menu.addSeparator()
         quit_action = QAction("&Avsluta", self)
+        quit_action.setIcon(icons.icon(self, "avsluta"))
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+        view_menu = menubar.addMenu("&Visa")
+        self._theme_action = QAction("Mörkt tema", self)
+        self._theme_action.setCheckable(True)
+        self._theme_action.setChecked(self._store.get_theme() == "dark")
+        self._theme_action.triggered.connect(self._toggle_theme)
+        view_menu.addAction(self._theme_action)
 
         help_menu = menubar.addMenu("&Hjälp")
         donate_action = QAction("&Stöd projektet… 💚", self)
@@ -177,10 +206,12 @@ class MainWindow(QMainWindow):
         help_menu.addAction(donate_action)
         help_menu.addSeparator()
         update_action = QAction("&Sök uppdateringar…", self)
+        update_action.setIcon(icons.icon(self, "uppdatera"))
         update_action.triggered.connect(lambda: self.check_self_update())
         help_menu.addAction(update_action)
         help_menu.addSeparator()
         about_action = QAction("&Om Repovakten", self)
+        about_action.setIcon(icons.icon(self, "info"))
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
@@ -198,6 +229,46 @@ class MainWindow(QMainWindow):
             return
         self._status_label.setText(message)
         self._autostart_action.setChecked(autostart.is_enabled())
+
+    # -------------------------------------------------- tema & fönster
+
+    def _toggle_theme(self, checked: bool = False) -> None:
+        """Växla mellan mörkt och ljust tema – valet sparas."""
+        name = "dark" if checked else "light"
+        QApplication.instance().setStyleSheet(build_stylesheet(name))
+        try:
+            self._store.set_theme(name)
+        except RepovaktenError as exc:
+            self._fail("Tema", str(exc), applog.LAGRING_FEL, exc=exc)
+            return
+        self._status_label.setText("Mörkt tema." if checked else "Ljust tema.")
+
+    def _set_initial_geometry(self) -> None:
+        """Sparat läge återställs – annars fylls skärmbredden med passande storlek."""
+        geometry = self._store.get_window_geometry()
+        available = self.screen().availableGeometry()
+        if geometry is not None:
+            x, y, width, height = geometry
+            # Aldrig utanför skärmen – t.ex. om en extern skärm försvunnit.
+            width = min(width, available.width())
+            height = min(height, available.height())
+            x = min(max(x, available.x()), available.x() + available.width() - width)
+            y = min(max(y, available.y()), available.y() + available.height() - height)
+            self.setGeometry(x, y, width, height)
+            return
+        width, height = default_window_size(available.width(), available.height())
+        self.resize(width, height)
+
+    def closeEvent(self, event) -> None:
+        """Kom ihåg fönstrets läge och storlek till nästa start."""
+        try:
+            geometry = self.geometry()
+            self._store.set_window_geometry(
+                [geometry.x(), geometry.y(), geometry.width(), geometry.height()]
+            )
+        except RepovaktenError:
+            pass  # sparningen får aldrig stoppa avslutet
+        super().closeEvent(event)
 
     # ------------------------------------------------- installationsmapp
 

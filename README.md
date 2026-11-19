@@ -6,7 +6,7 @@ på den här datorn, inte på något webbhotell.
 
 > **Status: v0.0.1 – första releasen.** Katalog, synk, spärrar, releaseurval,
 > SHA-256-filjämförelse, installation med backup och svenskt Qt-gränssnitt
-> (PySide6) är implementerade och testade (215 tester). Releasen uppdateras
+> (PySide6) är implementerade och testade (228 tester). Releasen uppdateras
 > automatiskt vid ny kod på branchen – versionsnumret höjs först när
 > användaren säger till. Se [IDEER.md](IDEER.md) för 25 förslag som gör
 > Repovakten bättre än konkurrenterna.
@@ -41,7 +41,7 @@ portabla ZIP:en startar `Repovakten.bat` / `./repovakten.sh` som förut
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"   # eller: uv pip install -e ".[dev]"
-.venv/bin/python -m pytest          # 215 tester
+.venv/bin/python -m pytest          # 228 tester
 ```
 
 ## Så fungerar det
@@ -102,6 +102,12 @@ python3 -m venv .venv
    (`<mapp>/<Appnamn>`, t.ex. `D:\Program\ArkivPiloten`) – ingen ägarnivå
    och aldrig versionsnummer i mappnamnet. Versionsrotar i ZIP-paket
    (t.ex. `MinApp-2.1.0/…`) strippas så att innehållet landar rent.
+10. **Design och tema** (menyn Visa): mörkt tema som standard med val för
+    ljust (Visa → Mörkt tema) – valet sparas. Typsnitt anpassat per OS med
+    fallback-kedja, ikoner i knappar och menyer (Qt:s standardikoner följer
+    tema och plattform – inga bildfiler), rundade kort, luftigare layout
+    och ett fönster som fyller skärmbredden, anpassar sig efter skärmens
+    storlek och kommer ihåg sitt läge mellan starter.
 
 ## Säkerhet och garantier
 
@@ -172,9 +178,10 @@ src/repovakten/
   __main__.py      Gemensam startpunkt: `python -m repovakten` (alla OS)
   gui.py           Startpunkt: `repovakten-gui` / `python -m repovakten.gui`
   ui/              Qt-gränssnitt (PySide6): huvudfönster, dialoger
-                   (filrapport, paketval, donation), bakgrundsarbetare
+                   (filrapport, paketval, donation), bakgrundsarbetare,
+                   tema (QSS, ljust/mörkt) och ikoner utan bildfiler
                    (synk/nedladdning/installation), svenska statustexter
-tests/             215 tester (fejkad GitHub-transport, inga nätverksanrop)
+tests/             228 tester (fejkad GitHub-transport, inga nätverksanrop)
 ```
 
 ## Kända begränsningar och nästa steg
